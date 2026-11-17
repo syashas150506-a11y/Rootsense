@@ -18,7 +18,7 @@ import {
 } from './lib/agronomy.js';
 import { computeTimeToStress } from './lib/timeToStress.js';
 import { buildFieldHeatmap } from './lib/heatmap.js';
-import { fetchKarnatakaWeather } from './lib/weather.js';
+import { fetchKarnatakaWeather, geocodeLocation } from './lib/weather.js';
 import {
   generateAssistantReply,
   getGeminiStatus,
@@ -93,7 +93,7 @@ app.get('/api/dashboard', async (_req, res) => {
     const device = FarmRepo.getDevice(farm.id) || FarmRepo.upsertDevice(farm.id, {});
     const history = FarmRepo.getReadingHistory(farm.id, 48);
     const latest = history[history.length - 1];
-    const weather = await fetchKarnatakaWeather(farm.location);
+    const weather = await fetchKarnatakaWeather(farm.location, farm.latitude, farm.longitude);
     const sensorHealth = evaluateSensorHealth(latest);
     const cropStress = evaluateCropStress(farm, latest, weather);
     const cropHealth = evaluateCropHealth(farm, history, weather);
@@ -126,12 +126,15 @@ app.get('/api/farm', (_req, res) => {
   res.json({ ...farm, device_id: device?.device_id || 'RS-KA-01' });
 });
 
-app.post('/api/farm', (req, res) => {
+app.post('/api/farm', async (req, res) => {
   try {
     const body = req.body || {};
+    const geo = body.location ? await geocodeLocation(String(body.location)) : undefined;
     const updated = FarmRepo.upsertFarm({
       farmer_name: body.farmer_name ?? body.name,
       location: body.location,
+      latitude: geo?.latitude,
+      longitude: geo?.longitude,
       crop_type: body.crop_type ?? body.cropGrown,
       soil_type: body.soil_type ?? body.soilType,
       growth_stage: body.growth_stage ?? body.growthStage,
@@ -346,7 +349,7 @@ app.get('/api/sensor/health', (_req, res) => {
 app.get('/api/weather', async (_req, res) => {
   try {
     const farm = FarmRepo.getActiveFarm();
-    const weather = await fetchKarnatakaWeather(farm.location);
+    const weather = await fetchKarnatakaWeather(farm.location, farm.latitude, farm.longitude);
     res.json(weather);
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });
@@ -485,7 +488,7 @@ app.post('/api/assistant/chat', async (req, res) => {
     const readings = FarmRepo.getReadingHistory(farm.id, 48);
     const latest = readings[readings.length - 1];
     const sensorHealth = evaluateSensorHealth(latest);
-    const weather = await fetchKarnatakaWeather(farm.location).catch(() => null);
+    const weather = await fetchKarnatakaWeather(farm.location, farm.latitude, farm.longitude).catch(() => null);
     const stress = evaluateCropStress(farm, latest, weather);
     const water = evaluateWaterRequirement(farm, latest, weather);
     const timeToStress = computeTimeToStress(farm, readings, weather);

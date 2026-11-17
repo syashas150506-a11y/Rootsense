@@ -143,7 +143,7 @@ function buildSystemInstruction(language: string, ctx: AssistantContext): string
     ? ctx.weather.forecast
         .map(
           (f) =>
-            `${f.day} (${f.date}): ${f.low}-${f.high}°C, ${f.icon}, rain ${f.rain_mm}mm (${f.rain_prob}%)`
+            `${f.day} (${f.date}): ${f.low}-${f.high}°C, ${f.condition}, rain ${f.rain_mm}mm (${f.rain_prob}%), ET0 ${f.et0_mm}mm/day, UV ${f.uv_max}, wind max ${f.wind_max_kmh}km/h`
         )
         .join(' | ')
     : 'Forecast unavailable';
@@ -184,12 +184,14 @@ function buildSystemInstruction(language: string, ctx: AssistantContext): string
     `OLS Trend & Time-to-Stress: State=${ctx.timeToStress.state}, Slope=${ctx.timeToStress.slope_per_hour ?? 'N/A'}%/hr, HoursToModerate=${ctx.timeToStress.hours_to_moderate ?? 'N/A'}, HoursToHigh=${ctx.timeToStress.hours_to_high ?? 'N/A'}, Confidence=${ctx.timeToStress.confidence_pct}%`,
     `7-Day Heatmap Insight: ${ctx.heatmap.insight}`,
     '',
-    '=== WATER REQUIREMENT & WEATHER ===',
+    '=== REAL-TIME WEATHER & AGRONOMIC WEATHER ANALYSIS ===',
     `Irrigation Decision: ${ctx.water.decision} (Urgency: ${ctx.water.urgency}) — ${ctx.water.advice}`,
     `Estimated Volume: ${ctx.water.amount_mm ?? 0} mm (${ctx.water.amount_litres ? `${ctx.water.amount_litres.toLocaleString()} litres` : '0 litres'})`,
-    `Current Weather (${ctx.weather?.source || 'unavailable'}): ${ctx.weather ? `${ctx.weather.temp}°C, ${ctx.weather.condition}, Humidity ${ctx.weather.humidity}%, Wind ${ctx.weather.wind_speed} m/s, Rain Prob ${ctx.weather.rain_prob}%, 24h Rain ${ctx.weather.rain_mm} mm` : 'Unavailable'}`,
-    `5-Day Forecast: ${forecastSummary}`,
+    `Current Real-Time Weather (${ctx.weather?.source || 'unavailable'} at ${ctx.weather?.fetched_at || 'N/A'}): ${ctx.weather ? `${ctx.weather.temp}°C (Feels like ${ctx.weather.apparent_temp}°C), ${ctx.weather.condition}, Humidity ${ctx.weather.humidity}%, Cloud Cover ${ctx.weather.cloud_cover}%, Wind ${ctx.weather.wind_speed_kmh} km/h (${ctx.weather.wind_speed} m/s), UV Max ${ctx.weather.uv_index}, 24h Rain Prob ${ctx.weather.rain_prob}%, 24h Expected Rain ${ctx.weather.rain_mm} mm` : 'Unavailable'}`,
+    `Agronomic Weather Analysis: ${ctx.weather?.analysis ? `ET0 Evapotranspiration=${ctx.weather.analysis.evapotranspiration_mm} mm/day (${ctx.weather.analysis.evapotranspiration_level}), VPD=${ctx.weather.analysis.vpd_kpa} kPa, Heat Stress Risk=${ctx.weather.analysis.heat_stress_risk}, Fungal Disease Risk=${ctx.weather.analysis.fungal_disease_risk}, Spraying Window=${ctx.weather.analysis.spray_window} (${ctx.weather.analysis.spray_reason}), 24h Rain=${ctx.weather.analysis.next_24h_rain_mm} mm, 72h Rain=${ctx.weather.analysis.next_72h_rain_mm} mm. Summary: ${ctx.weather.analysis.summary}` : 'Unavailable'}`,
+    `5-Day Live Forecast: ${forecastSummary}`,
     `Active Unread Alerts: ${alertsSummary}`,
+    'IMPORTANT: Always answer weather, irrigation, spraying, pest/disease, and field scheduling questions using the exact REAL-TIME weather & agronomic weather analysis figures above.',
   ].join('\n');
 }
 

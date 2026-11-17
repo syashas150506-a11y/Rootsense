@@ -261,24 +261,26 @@ export function evaluateWaterRequirement(
     };
   }
 
-  if (rainLikely || (weather && weather.rain_prob >= 20)) {
+  if (rainLikely) {
     return {
       decision: 'WAIT',
       urgency: 'LOW',
       amount_mm: 0,
       amount_litres: 0,
       reason_codes: reasons,
-      advice: 'Rain is expected tomorrow. Consider delaying irrigation to conserve water.',
+      advice: `Rain is forecast (${weather?.rain_prob ?? 50}% chance, ~${weather?.rain_mm ?? 0} mm in 24h). Delay irrigation to conserve water.`,
     };
   }
 
+  const et0 = weather?.analysis?.evapotranspiration_mm;
+  const etNote = et0 ? ` Daily crop water loss (ET₀) is ${et0} mm/day.` : '';
   return {
     decision: 'NO',
     urgency: 'NONE',
     amount_mm: 0,
     amount_litres: 0,
     reason_codes: reasons,
-    advice: 'Soil moisture is in the healthy range. No irrigation needed today.',
+    advice: `Soil moisture (${m}%) is healthy for ${farm.crop_type}. No irrigation needed today.${etNote}`,
   };
 }
 

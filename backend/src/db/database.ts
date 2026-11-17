@@ -259,6 +259,8 @@ export const FarmRepo = {
   upsertFarm(input: {
     farmer_name?: string;
     location?: string;
+    latitude?: number;
+    longitude?: number;
     crop_type?: string;
     soil_type?: string;
     growth_stage?: string;
@@ -272,6 +274,8 @@ export const FarmRepo = {
     const current = this.getActiveFarm();
     const location = input.location?.trim() || current.location;
     const coords = resolveDistrictCoords(location);
+    const lat = typeof input.latitude === 'number' ? input.latitude : coords.latitude;
+    const lon = typeof input.longitude === 'number' ? input.longitude : coords.longitude;
     const updatedAt = new Date().toISOString();
 
     db.prepare(
@@ -294,8 +298,8 @@ export const FarmRepo = {
     ).run(
       input.farmer_name?.trim() || current.farmer_name,
       location,
-      coords.latitude,
-      coords.longitude,
+      lat,
+      lon,
       input.crop_type || current.crop_type,
       input.soil_type || current.soil_type,
       input.growth_stage || current.growth_stage,

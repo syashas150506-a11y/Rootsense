@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,27 +14,37 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../consta
 import { useFarm } from '../../context/FarmContext';
 
 export default function WeatherIntelligenceScreen() {
-  const { weather, waterRequirement, farmDetails, refreshing, refreshAll } = useFarm();
+  const { weather, waterRequirement, farmDetails, loading, refreshing, refreshAll } = useFarm();
 
-  const temp = weather?.temp ?? 28;
-  const condition = weather?.condition || 'Partly Cloudy';
-  const humidity = weather?.humidity ?? 64;
-  const rainProb = weather?.rain_prob ?? 20;
-  const rainMm = weather?.rain_mm ?? 2.4;
+  const analysis = weather?.analysis;
+  const forecastDays = weather?.forecast || [];
+
+  const getRiskColor = (level?: string) => {
+    if (level === 'High' || level === 'Avoid') return Colors.error;
+    if (level === 'Moderate' || level === 'Caution') return '#C98A2B';
+    return Colors.oliveGreen;
+  };
+
+  const heroIcon =
+    weather?.icon === 'sunny'
+      ? 'sunny'
+      : weather?.icon === 'rainy'
+      ? 'rainy'
+      : weather?.icon === 'cloudy'
+      ? 'cloudy'
+      : 'partly-sunny';
+
+  const skyColors: [string, string, string] =
+    weather?.icon === 'rainy'
+      ? ['#5C7C99', '#7898B5', '#9AB4CC']
+      : weather?.icon === 'sunny'
+      ? ['#5FA4DC', '#84BCEB', '#B8DCF8']
+      : ['#74A9D8', '#99C4E9', '#BEE0FA'];
+
   const advice =
     waterRequirement?.advice ||
-    'Rain is expected tomorrow. Consider delaying irrigation to conserve water.';
-
-  const forecastDays =
-    weather?.forecast && weather.forecast.length > 0
-      ? weather.forecast
-      : [
-          { day: 'Tue', icon: 'partly-sunny', high: 28, low: 18 },
-          { day: 'Wed', icon: 'rainy', high: 27, low: 19 },
-          { day: 'Thu', icon: 'sunny', high: 26, low: 18 },
-          { day: 'Fri', icon: 'sunny', high: 27, low: 19 },
-          { day: 'Sat', icon: 'partly-sunny', high: 28, low: 20 },
-        ];
+    analysis?.summary ||
+    'Pull down to fetch real-time weather and irrigation analysis.';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -55,83 +66,190 @@ export default function WeatherIntelligenceScreen() {
             <Text style={styles.screenTitle}>Weather Intelligence</Text>
             <Text style={styles.locationSub}>
               {weather?.location_name || farmDetails?.location || 'Tumakuru, Karnataka'}
-              {weather?.source === 'met-norway-live' ? ' · MET Norway Live' : ''}
             </Text>
           </View>
         </View>
 
-        {/* Big Sky Blue Weather Card */}
-        <View style={styles.skyCard}>
-          <LinearGradient
-            colors={['#74A9D8', '#99C4E9', '#BEE0FA']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.skyGradient}
-          >
-            <View style={styles.skyContent}>
-              <Text style={styles.skyTemp}>{temp}°C</Text>
-              <Text style={styles.skyCondition}>{condition}</Text>
+        {!weather && loading ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={Colors.oliveGreen} />
+            <Text style={styles.loadingText}>Fetching real-time weather forecast...</Text>
+          </View>
+        ) : (
+          <>
+            {/* Real-Time Sky Card */}
+            <View style={styles.skyCard}>
+              <LinearGradient
+                colors={skyColors}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.skyGradient}
+              >
+                <View style={styles.skyContent}>
+                  <Text style={styles.skyTemp}>
+                    {weather ? `${weather.temp}°C` : '--°C'}
+                  </Text>
+                  <Text style={styles.skyCondition}>
+                    {weather?.condition || 'Loading...'}
+                  </Text>
+                  {weather?.apparent_temp !== undefined && (
+                    <Text style={styles.feelsLike}>
+                      Feels like {weather.apparent_temp}°C · Wind {weather.wind_speed_kmh ?? Math.round(weather.wind_speed * 3.6)} km/h
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.cloudIconWrapper}>
+                  <Ionicons name={heroIcon as any} size={76} color="rgba(255, 255, 255, 0.85)" />
+                </View>
+              </LinearGradient>
             </View>
 
-            <View style={styles.cloudIconWrapper}>
-              <Ionicons name="cloud" size={82} color="rgba(255, 255, 255, 0.75)" />
+            {/* 3 Real-Time Weather Metric Cards */}
+            <View style={styles.metricsRow}>
+              <View style={styles.metricCard}>
+                <Ionicons name="water-outline" size={22} color={Colors.deepOlive} />
+                <Text style={styles.metricValue}>
+                  {weather ? `${weather.humidity}%` : '--'}
+                </Text>
+                <Text style={styles.metricLabel}>Humidity</Text>
+              </View>
+
+              <View style={styles.metricCard}>
+                <Ionicons name="umbrella-outline" size={22} color={Colors.deepOlive} />
+                <Text style={styles.metricValue}>
+                  {weather ? `${weather.rain_prob}%` : '--'}
+                </Text>
+                <Text style={styles.metricLabel}>24h Rain Prob.</Text>
+              </View>
+
+              <View style={styles.metricCard}>
+                <Ionicons name="rainy-outline" size={22} color={Colors.deepOlive} />
+                <Text style={styles.metricValue}>
+                  {weather ? `${weather.rain_mm} mm` : '--'}
+                </Text>
+                <Text style={styles.metricLabel}>24h Rainfall</Text>
+              </View>
             </View>
-          </LinearGradient>
-        </View>
 
-        {/* 3 Metric Cards in a Row */}
-        <View style={styles.metricsRow}>
-          <View style={styles.metricCard}>
-            <Ionicons name="water-outline" size={22} color={Colors.deepOlive} />
-            <Text style={styles.metricValue}>{humidity}%</Text>
-            <Text style={styles.metricLabel}>Humidity</Text>
-          </View>
-
-          <View style={styles.metricCard}>
-            <Ionicons name="umbrella-outline" size={22} color={Colors.deepOlive} />
-            <Text style={styles.metricValue}>{rainProb}%</Text>
-            <Text style={styles.metricLabel}>Rain Prob.</Text>
-          </View>
-
-          <View style={styles.metricCard}>
-            <Ionicons name="rainy-outline" size={22} color={Colors.deepOlive} />
-            <Text style={styles.metricValue}>{rainMm} mm</Text>
-            <Text style={styles.metricLabel}>Exp. Rainfall</Text>
-          </View>
-        </View>
-
-        {/* 5-Day Forecast Section */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>5-Day Forecast</Text>
-          <Ionicons name="chevron-forward" size={18} color={Colors.mutedGrey} />
-        </View>
-
-        <View style={styles.forecastRow}>
-          {forecastDays.map((f, idx) => (
-            <View key={idx} style={styles.forecastCard}>
-              <Text style={styles.forecastDay}>{f.day}</Text>
-              <Ionicons
-                name={f.icon as any}
-                size={22}
-                color={f.icon === 'sunny' ? '#E67E22' : Colors.deepOlive}
-                style={styles.forecastIcon}
-              />
-              <Text style={styles.forecastHigh}>{f.high}°</Text>
-              <Text style={styles.forecastLow}>{f.low}°</Text>
+            {/* Real-Time 5-Day Forecast */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>5-Day Live Forecast</Text>
+              <Text style={styles.sectionHint}>Rain % &amp; °C</Text>
             </View>
-          ))}
-        </View>
 
-        {/* Irrigation Advice Card */}
-        <View style={styles.adviceCard}>
-          <View style={styles.adviceHeader}>
-            <View style={styles.adviceIconCircle}>
-              <Ionicons name="leaf" size={20} color={Colors.oliveGreen} />
+            <View style={styles.forecastRow}>
+              {forecastDays.map((f, idx) => (
+                <View key={f.date || idx} style={styles.forecastCard}>
+                  <Text style={styles.forecastDay}>{f.day}</Text>
+                  <Ionicons
+                    name={f.icon as any}
+                    size={22}
+                    color={
+                      f.icon === 'sunny'
+                        ? '#E67E22'
+                        : f.icon === 'rainy'
+                        ? '#3498DB'
+                        : Colors.deepOlive
+                    }
+                    style={styles.forecastIcon}
+                  />
+                  <Text style={styles.forecastHigh}>{f.high}°</Text>
+                  <Text style={styles.forecastLow}>{f.low}°</Text>
+                  <Text style={styles.forecastRain}>{f.rain_prob}%</Text>
+                </View>
+              ))}
             </View>
-            <Text style={styles.adviceTitle}>Irrigation Advice</Text>
-          </View>
-          <Text style={styles.adviceText}>{advice}</Text>
-        </View>
+
+            {/* Real-Time Agronomic Weather Analysis Card */}
+            {analysis && (
+              <View style={styles.analysisCard}>
+                <View style={styles.analysisHeader}>
+                  <View style={styles.adviceIconCircle}>
+                    <Ionicons name="analytics-outline" size={19} color={Colors.oliveGreen} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.adviceTitle}>Field Weather Analysis</Text>
+                    <Text style={styles.analysisSub}>
+                      VPD {analysis.vpd_kpa} kPa · 72h Rain {analysis.next_72h_rain_mm} mm
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.analysisGrid}>
+                  <View style={styles.analysisTile}>
+                    <Text style={styles.tileLabel}>Crop Water Loss (ET₀)</Text>
+                    <Text style={styles.tileValue}>
+                      {analysis.evapotranspiration_mm} mm/d
+                    </Text>
+                    <Text
+                      style={[
+                        styles.tileBadge,
+                        { color: getRiskColor(analysis.evapotranspiration_level) },
+                      ]}
+                    >
+                      {analysis.evapotranspiration_level} Demand
+                    </Text>
+                  </View>
+
+                  <View style={styles.analysisTile}>
+                    <Text style={styles.tileLabel}>Heat Stress</Text>
+                    <Text
+                      style={[
+                        styles.tileValue,
+                        { color: getRiskColor(analysis.heat_stress_risk) },
+                      ]}
+                    >
+                      {analysis.heat_stress_risk}
+                    </Text>
+                    <Text style={styles.tileSub}>UV Max {weather?.uv_index ?? '--'}</Text>
+                  </View>
+
+                  <View style={styles.analysisTile}>
+                    <Text style={styles.tileLabel}>Disease / Fungal</Text>
+                    <Text
+                      style={[
+                        styles.tileValue,
+                        { color: getRiskColor(analysis.fungal_disease_risk) },
+                      ]}
+                    >
+                      {analysis.fungal_disease_risk}
+                    </Text>
+                    <Text style={styles.tileSub}>RH {weather?.humidity ?? '--'}%</Text>
+                  </View>
+
+                  <View style={styles.analysisTile}>
+                    <Text style={styles.tileLabel}>Spray Window</Text>
+                    <Text
+                      style={[
+                        styles.tileValue,
+                        { color: getRiskColor(analysis.spray_window) },
+                      ]}
+                    >
+                      {analysis.spray_window}
+                    </Text>
+                    <Text style={styles.tileSub}>
+                      {weather?.wind_speed_kmh ?? '--'} km/h wind
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.analysisSummary}>{analysis.summary}</Text>
+              </View>
+            )}
+
+            {/* Irrigation Advice Card */}
+            <View style={styles.adviceCard}>
+              <View style={styles.adviceHeader}>
+                <View style={styles.adviceIconCircle}>
+                  <Ionicons name="leaf" size={20} color={Colors.oliveGreen} />
+                </View>
+                <Text style={styles.adviceTitle}>Irrigation Advice</Text>
+              </View>
+              <Text style={styles.adviceText}>{advice}</Text>
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -163,8 +281,23 @@ const styles = StyleSheet.create({
     color: Colors.mutedGrey,
     marginTop: 2,
   },
+  loadingCard: {
+    backgroundColor: Colors.softCream,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xxxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  loadingText: {
+    fontSize: Typography.fontSizes.sm,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
   skyCard: {
-    height: 140,
+    height: 150,
     borderRadius: BorderRadius.xl,
     overflow: 'hidden',
     marginBottom: Spacing.md,
@@ -178,7 +311,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
   },
   skyContent: {
-    gap: 4,
+    gap: 3,
+    flex: 1,
   },
   skyTemp: {
     fontSize: 42,
@@ -188,8 +322,14 @@ const styles = StyleSheet.create({
   },
   skyCondition: {
     fontSize: Typography.fontSizes.md,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.95)',
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.96)',
+  },
+  feelsLike: {
+    fontSize: 11.5,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+    marginTop: 2,
   },
   cloudIconWrapper: {
     alignItems: 'center',
@@ -234,6 +374,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.charcoal,
   },
+  sectionHint: {
+    fontSize: 11,
+    color: Colors.mutedGrey,
+    fontWeight: '600',
+  },
   forecastRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -248,16 +393,16 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 4,
+    gap: 3,
     ...Shadows.soft,
   },
   forecastDay: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.mutedGrey,
   },
   forecastIcon: {
-    marginVertical: 4,
+    marginVertical: 3,
   },
   forecastHigh: {
     fontSize: 13,
@@ -267,6 +412,72 @@ const styles = StyleSheet.create({
   forecastLow: {
     fontSize: 11,
     color: Colors.mutedGrey,
+  },
+  forecastRain: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#3498DB',
+    marginTop: 2,
+  },
+  analysisCard: {
+    backgroundColor: Colors.pureWhite,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.md,
+    gap: Spacing.md,
+    ...Shadows.card,
+  },
+  analysisHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  analysisSub: {
+    fontSize: 11,
+    color: Colors.mutedGrey,
+    marginTop: 1,
+  },
+  analysisGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  analysisTile: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    backgroundColor: Colors.softCream,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm + 2,
+    borderWidth: 1,
+    borderColor: Colors.sandBeige,
+  },
+  tileLabel: {
+    fontSize: 10.5,
+    color: Colors.mutedGrey,
+    fontWeight: '600',
+  },
+  tileValue: {
+    fontSize: Typography.fontSizes.md,
+    fontWeight: '800',
+    color: Colors.charcoal,
+    marginTop: 2,
+  },
+  tileBadge: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  tileSub: {
+    fontSize: 10.5,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  analysisSummary: {
+    fontSize: Typography.fontSizes.xs + 1,
+    color: Colors.textSecondary,
+    lineHeight: 19,
   },
   adviceCard: {
     backgroundColor: Colors.softCream,

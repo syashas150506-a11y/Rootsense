@@ -34,8 +34,16 @@ export default function HomeDashboardScreen() {
 
   const firstName = getFirstName();
   const location = farmDetails?.location || 'Tumakuru, Karnataka';
-  const temp = weather?.temp ?? 32;
-  const condition = weather?.condition || 'Partly Cloudy';
+  const temp = weather?.temp;
+  const condition = weather?.condition || 'Loading weather...';
+  const weatherIconName =
+    weather?.icon === 'sunny'
+      ? 'sunny'
+      : weather?.icon === 'rainy'
+      ? 'rainy'
+      : weather?.icon === 'cloudy'
+      ? 'cloudy'
+      : 'partly-sunny';
   const latestFromHistory = soilHistory?.readings?.[soilHistory.readings.length - 1];
   const activeReading = latestReading || latestFromHistory;
   const soilTemp = activeReading?.soil_temp ?? 27;
@@ -43,8 +51,8 @@ export default function HomeDashboardScreen() {
     activeReading?.humidity !== null && activeReading?.humidity !== undefined
       ? Math.round(activeReading.humidity)
       : weather?.humidity ?? 64;
-  const windSpeed = weather?.wind_speed ?? 7;
-  const rainProb = weather?.rain_prob ?? 20;
+  const windSpeed = weather?.wind_speed ?? 0;
+  const rainProb = weather?.rain_prob ?? 0;
   const moisture = activeReading?.moisture ?? farmDetails?.soilMoisture ?? 38.5;
   const hoursToStress = timeToStress?.hours_to_moderate ?? farmDetails?.timeUntilStressHours ?? 12;
 
@@ -117,9 +125,9 @@ export default function HomeDashboardScreen() {
             <View style={styles.weatherHeaderRow}>
               <View style={styles.tempColumn}>
                 <View style={styles.tempRow}>
-                  <Text style={styles.tempText}>{temp}°</Text>
+                  <Text style={styles.tempText}>{temp !== undefined ? `${temp}°` : '--°'}</Text>
                   <Ionicons
-                    name="partly-sunny"
+                    name={weatherIconName as any}
                     size={28}
                     color={Colors.goldenWheat}
                     style={styles.weatherIcon}

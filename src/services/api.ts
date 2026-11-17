@@ -106,22 +106,47 @@ export interface ApiDailyForecast {
   day: string;
   date: string;
   icon: 'sunny' | 'partly-sunny' | 'cloudy' | 'rainy';
+  condition?: string;
   high: number;
   low: number;
   rain_mm: number;
   rain_prob: number;
+  et0_mm?: number;
+  uv_max?: number;
+  wind_max_kmh?: number;
+}
+
+export interface ApiWeatherAnalysis {
+  evapotranspiration_mm: number;
+  evapotranspiration_level: 'Low' | 'Moderate' | 'High';
+  vpd_kpa: number;
+  heat_stress_risk: 'Low' | 'Moderate' | 'High';
+  fungal_disease_risk: 'Low' | 'Moderate' | 'High';
+  spray_window: 'Good' | 'Caution' | 'Avoid';
+  spray_reason: string;
+  next_24h_rain_mm: number;
+  next_72h_rain_mm: number;
+  summary: string;
 }
 
 export interface ApiWeather {
   temp: number;
+  apparent_temp?: number;
   condition: string;
+  icon?: 'sunny' | 'partly-sunny' | 'cloudy' | 'rainy';
   humidity: number;
+  cloud_cover?: number;
   wind_speed: number;
+  wind_speed_kmh?: number;
+  uv_index?: number;
   rain_prob: number;
   rain_mm: number;
   location_name: string;
-  source: 'met-norway-live' | 'fallback-cache';
+  latitude?: number;
+  longitude?: number;
+  source: 'open-meteo-live' | 'met-norway-live';
   forecast: ApiDailyForecast[];
+  analysis?: ApiWeatherAnalysis;
   fetched_at: string;
 }
 
