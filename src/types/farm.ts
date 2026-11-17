@@ -3,6 +3,8 @@ export type FieldUnit = 'Acres' | 'Hectares' | 'Gunthas' | 'Sq. Meters';
 export interface FarmDetails {
   name: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
   fieldDimension: string;
   fieldUnit: FieldUnit;
   irrigationType: string;

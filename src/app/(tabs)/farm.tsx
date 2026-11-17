@@ -12,6 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { BotanicalCornerLeaves } from '../../components/BotanicalCornerLeaves';
+import { SensorLocationMap } from '../../components/SensorLocationMap';
+import { resolveClientCoords } from '../../constants/agronomyData';
 import { useFarm } from '../../context/FarmContext';
 
 export default function MyFarmScreen() {
@@ -20,12 +22,16 @@ export default function MyFarmScreen() {
 
   const name = farmDetails?.name || 'Ramesh Gowda';
   const location = farmDetails?.location || 'Tumakuru, Karnataka';
+  const fallbackCoords = resolveClientCoords(location);
+  const latitude = farmDetails?.latitude ?? fallbackCoords.latitude;
+  const longitude = farmDetails?.longitude ?? fallbackCoords.longitude;
   const crop = farmDetails?.cropGrown || 'Ragi';
   const soil = farmDetails?.soilType || 'Red Loam';
   const dimension = farmDetails?.fieldDimension || '2.5';
   const unit = farmDetails?.fieldUnit || 'Acres';
   const deviceId = device?.device_id || 'RS-KA-01';
   const deviceStatus = device?.status || 'Online';
+  const moisture = farmDetails?.soilMoisture ?? 38.5;
 
   const handleReset = () => {
     Alert.alert(
@@ -73,6 +79,17 @@ export default function MyFarmScreen() {
             </View>
           </View>
         </View>
+
+        {/* Free OpenStreetMap + Leaflet Sensor Location Map */}
+        <SensorLocationMap
+          latitude={latitude}
+          longitude={longitude}
+          locationName={location}
+          deviceId={deviceId}
+          moisture={moisture}
+          status={deviceStatus}
+          cropName={crop}
+        />
 
         {/* Menu Navigation Rows */}
         <View style={styles.menuContainer}>

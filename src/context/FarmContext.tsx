@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FarmDetails, FieldUnit, NotificationItem } from '../types/farm';
-import { DEFAULT_FARM_DETAILS } from '../constants/agronomyData';
+import { DEFAULT_FARM_DETAILS, resolveClientCoords } from '../constants/agronomyData';
 import {
   RootSenseApi,
   ApiWeather,
@@ -143,6 +143,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const mappedFarm: FarmDetails = {
         name: dashboard.farm.farmer_name,
         location: dashboard.farm.location,
+        latitude: dashboard.farm.latitude,
+        longitude: dashboard.farm.longitude,
         fieldDimension: String(dashboard.farm.field_dimension),
         fieldUnit: (dashboard.farm.field_unit as FieldUnit) || 'Acres',
         irrigationType: dashboard.farm.irrigation_type,
@@ -215,9 +217,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [syncFromBackend]);
 
   const saveFarmDetails = async (details: Partial<FarmDetails>) => {
+    const resolvedLocation = details.location || farmDetails?.location || DEFAULT_FARM_DETAILS.location;
+    const coords = resolveClientCoords(resolvedLocation);
     const updated: FarmDetails = {
       ...(farmDetails || DEFAULT_FARM_DETAILS),
       ...details,
+      latitude: details.latitude ?? coords.latitude,
+      longitude: details.longitude ?? coords.longitude,
       configuredAt: new Date().toISOString(),
     };
     setFarmDetails(updated);
