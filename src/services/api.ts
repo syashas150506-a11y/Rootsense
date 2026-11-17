@@ -98,6 +98,7 @@ export interface ApiSoilReading {
   device_id: string;
   moisture: number;
   soil_temp: number;
+  humidity: number | null;
   timestamp: string;
 }
 
@@ -250,10 +251,10 @@ export const RootSenseApi = {
 
   getSoilHeatmap: (days = 7) => requestJson<ApiHeatmapResponse>(`/api/soil/heatmap?days=${days}`),
 
-  postSoilReading: (moisture: number, soil_temp?: number) =>
+  postSoilReading: (moisture: number, soil_temp?: number, humidity?: number) =>
     requestJson<ApiSoilReading>('/api/soil/reading', {
       method: 'POST',
-      body: JSON.stringify({ moisture, soil_temp }),
+      body: JSON.stringify({ moisture, soil_temp, humidity }),
     }),
 
   getAlerts: () => requestJson<ApiAlertItem[]>('/api/alerts'),

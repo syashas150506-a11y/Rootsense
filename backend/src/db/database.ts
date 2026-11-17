@@ -44,6 +44,7 @@ export interface SoilReadingRow {
   device_id: string;
   moisture: number;
   soil_temp: number;
+  humidity: number | null;
   timestamp: string;
 }
 
@@ -84,6 +85,12 @@ db.exec('PRAGMA foreign_keys = ON;');
 const schemaPath = path.join(__dirname, 'schema.sql');
 const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
 db.exec(schemaSql);
+
+// Safe column migration for existing databases created before humidity column existed
+const soilCols = db.prepare('PRAGMA table_info(soil_readings)').all() as Array<{ name?: string }>;
+if (!soilCols.some((c) => c.name === 'humidity')) {
+  db.exec('ALTER TABLE soil_readings ADD COLUMN humidity REAL;');
+}
 
 export function getDbPath(): string {
   return dbPath;
@@ -372,23 +379,57 @@ export const FarmRepo = {
     deviceId: string,
     moisture: number,
     soilTemp: number,
-    timestamp: string
+    timestamp: string,
+    humidity: number | null = null
   ): SoilReadingRow {
     const res = db
       .prepare(
-        `INSERT INTO soil_readings (farm_id, device_id, moisture, soil_temp, timestamp)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO soil_readings (farm_id, device_id, moisture, soil_temp, humidity, timestamp)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .run(farmId, deviceId, moisture, soilTemp, timestamp);
+      .run(farmId, deviceId, moisture, soilTemp, humidity, timestamp);
 
-    // Update device last_sync_at & Online status
-    db.prepare(
-      `UPDATE devices SET status = 'Online', last_sync_at = ? WHERE farm_id = ?`
-    ).run(timestamp, farmId);
+    // Keep device record synced with live hardware device_id and latest sync timestamp
+    const existingDevice = this.getDevice(farmId);
+    if (existingDevice) {
+      db.prepare(
+        `UPDATE devices SET device_id = ?, status = 'Online', last_sync_at = ? WHERE id = ?`
+      ).run(deviceId, timestamp, existingDevice.id);
+    } else {
+      this.upsertDevice(farmId, {
+        device_id: deviceId,
+        status: 'Online',
+        last_sync_at: timestamp,
+      });
+    }
 
     return db
       .prepare('SELECT * FROM soil_readings WHERE id = ?')
       .get(Number(res.lastInsertRowid)) as unknown as SoilReadingRow;
+  },
+
+  insertReadingIfNew(
+    farmId: number,
+    deviceId: string,
+    moisture: number,
+    soilTemp: number,
+    timestamp: string,
+    humidity: number | null = null
+  ): { inserted: boolean; row: SoilReadingRow } {
+    const existing = db
+      .prepare(
+        `SELECT * FROM soil_readings
+         WHERE farm_id = ? AND device_id = ? AND timestamp = ?
+         LIMIT 1`
+      )
+      .get(farmId, deviceId, timestamp) as unknown as SoilReadingRow | undefined;
+
+    if (existing) {
+      return { inserted: false, row: existing };
+    }
+
+    const row = this.insertReading(farmId, deviceId, moisture, soilTemp, timestamp, humidity);
+    return { inserted: true, row };
   },
 
   getLatestReading(farmId: number): SoilReadingRow | undefined {

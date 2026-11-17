@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS soil_readings (
   device_id TEXT NOT NULL,
   moisture REAL NOT NULL,
   soil_temp REAL NOT NULL DEFAULT 27.0,
+  humidity REAL,
   timestamp TEXT NOT NULL,
   FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE
 );

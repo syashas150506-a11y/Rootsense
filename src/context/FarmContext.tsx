@@ -10,6 +10,7 @@ import {
   ApiTimeToStress,
   ApiSensorHealth,
   ApiDeviceRow,
+  ApiSoilReading,
   ApiSoilHistoryResponse,
   ApiHeatmapResponse,
   ApiChatMessage,
@@ -22,6 +23,7 @@ interface FarmContextType {
   backendConnected: boolean;
   isConfigured: boolean;
   device: ApiDeviceRow | null;
+  latestReading: ApiSoilReading | null;
   sensorHealth: ApiSensorHealth | null;
   weather: ApiWeather | null;
   cropStress: ApiCropStress | null;
@@ -115,6 +117,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [backendConnected, setBackendConnected] = useState(false);
 
   const [device, setDevice] = useState<ApiDeviceRow | null>(null);
+  const [latestReading, setLatestReading] = useState<ApiSoilReading | null>(null);
   const [sensorHealth, setSensorHealth] = useState<ApiSensorHealth | null>(null);
   const [weather, setWeather] = useState<ApiWeather | null>(null);
   const [cropStress, setCropStress] = useState<ApiCropStress | null>(null);
@@ -160,6 +163,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setFarmDetails(mappedFarm);
       setDevice(dashboard.device);
+      setLatestReading(dashboard.latest);
       setSensorHealth(dashboard.sensorHealth);
       setWeather(dashboard.weather);
       setCropStress(dashboard.cropStress);
@@ -202,10 +206,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     init();
 
-    // Poll backend every 15 seconds for live telemetry updates
+    // Poll backend every 5 seconds for live field sensor updates from FastAPI
     const interval = setInterval(() => {
       syncFromBackend();
-    }, 15_000);
+    }, 5_000);
 
     return () => clearInterval(interval);
   }, [syncFromBackend]);
@@ -387,6 +391,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         backendConnected,
         isConfigured,
         device,
+        latestReading,
         sensorHealth,
         weather,
         cropStress,

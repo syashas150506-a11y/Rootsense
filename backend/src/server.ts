@@ -24,6 +24,11 @@ import {
   getGeminiStatus,
   saveAndVerifyGeminiKey,
 } from './lib/assistant.js';
+import {
+  syncFromFastApi,
+  forwardToFastApi,
+  getFastApiBridgeStatus,
+} from './lib/fastapiBridge.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -75,6 +80,7 @@ app.get('/api/health', (_req, res) => {
     service: 'Root Sense Backend API',
     database: 'SQLite (node:sqlite)',
     db_path: getDbPath(),
+    fastapi_bridge: getFastApiBridgeStatus(),
     timestamp: new Date().toISOString(),
   });
 });
@@ -83,6 +89,7 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/dashboard', async (_req, res) => {
   try {
     const farm = FarmRepo.getActiveFarm();
+    await syncFromFastApi(farm.id, () => syncFieldAlerts(farm.id));
     const device = FarmRepo.getDevice(farm.id) || FarmRepo.upsertDevice(farm.id, {});
     const history = FarmRepo.getReadingHistory(farm.id, 48);
     const latest = history[history.length - 1];
@@ -104,6 +111,7 @@ app.get('/api/dashboard', async (_req, res) => {
       cropHealth,
       waterRequirement,
       timeToStress,
+      telemetryBridge: getFastApiBridgeStatus(),
       unreadAlerts: alerts.filter((a) => a.read === 0).length,
     });
   } catch (err) {
@@ -174,15 +182,17 @@ app.post('/api/device/connect', (req, res) => {
 });
 
 // Soil Telemetry Routes
-app.get('/api/soil/latest', (_req, res) => {
+app.get('/api/soil/latest', async (_req, res) => {
   const farm = FarmRepo.getActiveFarm();
+  await syncFromFastApi(farm.id, () => syncFieldAlerts(farm.id));
   const latest = FarmRepo.getLatestReading(farm.id);
   const health = evaluateSensorHealth(latest);
   res.json({
     moisture: latest?.moisture ?? null,
     soil_temp: latest?.soil_temp ?? null,
+    humidity: latest?.humidity ?? null,
     timestamp: latest?.timestamp ?? null,
-    device_id: latest?.device_id ?? 'RS-KA-01',
+    device_id: latest?.device_id ?? 'ROOTSENSE_001',
     sensor_status: health.status,
   });
 });
@@ -216,10 +226,10 @@ app.get('/api/soil/history', (_req, res) => {
   });
 });
 
-app.post('/api/soil/reading', (req, res) => {
+app.post('/api/soil/reading', async (req, res) => {
   const farm = FarmRepo.getActiveFarm();
   const device = FarmRepo.getDevice(farm.id);
-  const { moisture, soil_temp, timestamp, device_id } = req.body || {};
+  const { moisture, soil_temp, humidity, timestamp, device_id } = req.body || {};
 
   const numMoisture = Number(moisture);
   if (moisture === undefined || Number.isNaN(numMoisture) || numMoisture < 0 || numMoisture > 100) {
@@ -232,25 +242,90 @@ app.post('/api/soil/reading', (req, res) => {
     soil_temp !== undefined && !Number.isNaN(Number(soil_temp))
       ? Number(Number(soil_temp).toFixed(1))
       : 27.0;
+  const numHumidity =
+    humidity !== undefined && humidity !== null && !Number.isNaN(Number(humidity))
+      ? Number(Math.max(0, Math.min(100, Number(humidity))).toFixed(1))
+      : null;
 
   let ts = new Date().toISOString();
   if (typeof timestamp === 'string' && !Number.isNaN(Date.parse(timestamp))) {
     ts = new Date(timestamp).toISOString();
   }
 
-  const saved = FarmRepo.insertReading(
-    farm.id,
+  const resolvedDeviceId =
     typeof device_id === 'string' && device_id.trim()
       ? device_id.trim()
-      : device?.device_id || 'RS-KA-01',
+      : device?.device_id || 'ROOTSENSE_001';
+
+  const saved = FarmRepo.insertReading(
+    farm.id,
+    resolvedDeviceId,
     roundedMoisture,
     numTemp,
-    ts
+    ts,
+    numHumidity
   );
+
+  // Mirror to FastAPI / Supabase in background if FastAPI is running
+  void forwardToFastApi({
+    device_id: resolvedDeviceId,
+    temperature: numTemp,
+    humidity: numHumidity ?? 64.0,
+    soil_moisture: roundedMoisture,
+  });
 
   syncFieldAlerts(farm.id);
   res.status(201).json(saved);
 });
+
+// FastAPI-compatible hardware telemetry endpoint: POST /api/sensor-data & POST /sensor-data
+const handleFastApiSensorPayload = (req: express.Request, res: express.Response) => {
+  const farm = FarmRepo.getActiveFarm();
+  const body = req.body || {};
+  const numMoisture = Number(body.soil_moisture ?? body.moisture);
+  const numTemp = Number(body.temperature ?? body.soil_temp ?? 27.0);
+  const numHumidity =
+    body.humidity !== undefined && body.humidity !== null ? Number(body.humidity) : null;
+
+  if (Number.isNaN(numMoisture) || numMoisture < 0 || numMoisture > 100) {
+    res.status(400).json({ error: 'soil_moisture must be between 0 and 100' });
+    return;
+  }
+
+  const deviceId =
+    typeof body.device_id === 'string' && body.device_id.trim()
+      ? body.device_id.trim()
+      : 'ROOTSENSE_001';
+  const ts =
+    typeof body.recorded_at === 'string' && !Number.isNaN(Date.parse(body.recorded_at))
+      ? new Date(body.recorded_at).toISOString()
+      : new Date().toISOString();
+
+  const { inserted, row } = FarmRepo.insertReadingIfNew(
+    farm.id,
+    deviceId,
+    Number(numMoisture.toFixed(1)),
+    Number.isNaN(numTemp) ? 27.0 : Number(numTemp.toFixed(1)),
+    ts,
+    numHumidity !== null && !Number.isNaN(numHumidity)
+      ? Number(Math.max(0, Math.min(100, numHumidity)).toFixed(1))
+      : null
+  );
+
+  if (inserted) {
+    syncFieldAlerts(farm.id);
+  }
+
+  res.status(201).json({
+    message: 'Sensor data synced to Root Sense app backend',
+    inserted,
+    irrigation_status: numMoisture < 30 ? 'WATER NEEDED' : 'SOIL MOISTURE OK',
+    data: row,
+  });
+};
+
+app.post('/api/sensor-data', handleFastApiSensorPayload);
+app.post('/sensor-data', handleFastApiSensorPayload);
 
 app.get('/api/soil/heatmap', (req, res) => {
   const farm = FarmRepo.getActiveFarm();
@@ -461,7 +536,16 @@ app.post('/api/assistant/chat', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🌱 Root Sense Backend API running on http://localhost:${PORT}`);
   console.log(`🗄️  SQLite Database: ${getDbPath()}`);
+  console.log(`📡 FastAPI Sensor Bridge: ${getFastApiBridgeStatus().url}`);
   console.log(
     `🤖 Gemini AI: ${process.env.GEMINI_API_KEY ? 'Live API Key Configured' : 'Deterministic Grounded Agronomy Fallback (set GEMINI_API_KEY in backend/.env for Gemini)'}\n`
   );
+
+  // Initial sync + periodic 5s live hardware sensor sync from FastAPI
+  const runBridgeSync = () => {
+    const activeFarm = FarmRepo.getActiveFarm();
+    void syncFromFastApi(activeFarm.id, () => syncFieldAlerts(activeFarm.id), true);
+  };
+  runBridgeSync();
+  setInterval(runBridgeSync, 5000);
 });

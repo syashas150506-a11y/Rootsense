@@ -26,6 +26,7 @@ export default function HomeDashboardScreen() {
     cropStress,
     waterRequirement,
     timeToStress,
+    latestReading,
     soilHistory,
     refreshing,
     refreshAll,
@@ -35,14 +36,17 @@ export default function HomeDashboardScreen() {
   const location = farmDetails?.location || 'Tumakuru, Karnataka';
   const temp = weather?.temp ?? 32;
   const condition = weather?.condition || 'Partly Cloudy';
-  const humidity = weather?.humidity ?? 64;
+  const latestFromHistory = soilHistory?.readings?.[soilHistory.readings.length - 1];
+  const activeReading = latestReading || latestFromHistory;
+  const soilTemp = activeReading?.soil_temp ?? 27;
+  const humidity =
+    activeReading?.humidity !== null && activeReading?.humidity !== undefined
+      ? Math.round(activeReading.humidity)
+      : weather?.humidity ?? 64;
   const windSpeed = weather?.wind_speed ?? 7;
   const rainProb = weather?.rain_prob ?? 20;
-  const moisture = farmDetails?.soilMoisture ?? 38.5;
+  const moisture = activeReading?.moisture ?? farmDetails?.soilMoisture ?? 38.5;
   const hoursToStress = timeToStress?.hours_to_moderate ?? farmDetails?.timeUntilStressHours ?? 12;
-
-  const latestReading = soilHistory?.readings?.[soilHistory.readings.length - 1];
-  const soilTemp = latestReading?.soil_temp ?? 27;
 
   const healthStatus = cropStress?.status || 'Healthy';
   const healthNote = cropStress?.note || 'Your crop is in good condition.';

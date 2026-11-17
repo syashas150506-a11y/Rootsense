@@ -15,10 +15,12 @@ import { useFarm } from '../../context/FarmContext';
 
 export default function SensorStatusScreen() {
   const router = useRouter();
-  const { farmDetails, device, sensorHealth, refreshAll } = useFarm();
+  const { farmDetails, device, latestReading, sensorHealth, refreshAll } = useFarm();
 
-  const deviceId = device?.device_id || farmDetails?.deviceId || 'RS-KA-01';
-  const moisture = farmDetails?.soilMoisture ?? 38.5;
+  const deviceId = latestReading?.device_id || device?.device_id || farmDetails?.deviceId || 'ROOTSENSE_001';
+  const moisture = latestReading?.moisture ?? farmDetails?.soilMoisture ?? 38.5;
+  const fieldTemp = latestReading?.soil_temp ?? 27.0;
+  const fieldHumidity = latestReading?.humidity ?? 64.0;
   const signalDbm = device?.signal_dbm ?? -62;
   const ageSeconds = sensorHealth?.age_seconds;
   const lastReceivedText =
@@ -113,6 +115,21 @@ export default function SensorStatusScreen() {
               <View>
                 <Text style={styles.infoTitle}>Last Data Received</Text>
                 <Text style={styles.infoSubtitle}>{lastReceivedText}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Live Field Temperature & Humidity from ESP32 */}
+          <View style={styles.infoCard}>
+            <View style={styles.infoCardLeft}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="thermometer-outline" size={20} color={Colors.deepOlive} />
+              </View>
+              <View>
+                <Text style={styles.infoTitle}>Field Temp &amp; Humidity</Text>
+                <Text style={styles.infoSubtitle}>
+                  {fieldTemp}°C · {fieldHumidity}% RH
+                </Text>
               </View>
             </View>
           </View>
