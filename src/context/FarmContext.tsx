@@ -278,11 +278,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const markAllNotificationsRead = async () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications([]);
     try {
       await RootSenseApi.markAllAlertsRead();
     } catch {
-      // local optimistic state remains
+      // local optimistic clear remains
     }
   };
 

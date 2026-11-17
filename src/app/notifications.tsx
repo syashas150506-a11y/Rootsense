@@ -56,56 +56,75 @@ export default function NotificationsScreen() {
           <Ionicons name="arrow-back" size={20} color={Colors.charcoal} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <TouchableOpacity
-          onPress={markAllNotificationsRead}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={styles.markAllText}>Mark all as read</Text>
-        </TouchableOpacity>
+        {notifications.length > 0 ? (
+          <TouchableOpacity
+            onPress={markAllNotificationsRead}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.markAllText}>Mark all as read</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 96 }} />
+        )}
       </View>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          notifications.length === 0 && styles.emptyScrollContent,
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.notificationsList}>
-          {notifications.map((item) => {
-            const iconConfig = getAlertIcon(item.type);
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.notificationCard,
-                  !item.read && styles.unreadCard,
-                ]}
-                onPress={() => markNotificationRead(item.id)}
-                activeOpacity={0.8}
-              >
-                <View
+        {notifications.length === 0 ? (
+          <View style={styles.emptyStateCard}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="checkmark-done" size={32} color={Colors.oliveGreen} />
+            </View>
+            <Text style={styles.emptyTitle}>All caught up!</Text>
+            <Text style={styles.emptySubtitle}>
+              No notifications right now. New field alerts and weather updates will appear here.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.notificationsList}>
+            {notifications.map((item) => {
+              const iconConfig = getAlertIcon(item.type);
+              return (
+                <TouchableOpacity
+                  key={item.id}
                   style={[
-                    styles.iconCircle,
-                    { backgroundColor: iconConfig.bgColor },
+                    styles.notificationCard,
+                    !item.read && styles.unreadCard,
                   ]}
+                  onPress={() => markNotificationRead(item.id)}
+                  activeOpacity={0.8}
                 >
-                  <Ionicons
-                    name={iconConfig.name}
-                    size={20}
-                    color={iconConfig.iconColor}
-                  />
-                </View>
+                  <View
+                    style={[
+                      styles.iconCircle,
+                      { backgroundColor: iconConfig.bgColor },
+                    ]}
+                  >
+                    <Ionicons
+                      name={iconConfig.name}
+                      size={20}
+                      color={iconConfig.iconColor}
+                    />
+                  </View>
 
-                <View style={styles.textContent}>
-                  <Text style={styles.alertTitle}>{item.title}</Text>
-                  <Text style={styles.alertMessage}>{item.message}</Text>
-                  <Text style={styles.alertTime}>{item.time}</Text>
-                </View>
+                  <View style={styles.textContent}>
+                    <Text style={styles.alertTitle}>{item.title}</Text>
+                    <Text style={styles.alertMessage}>{item.message}</Text>
+                    <Text style={styles.alertTime}>{item.time}</Text>
+                  </View>
 
-                {!item.read && <View style={styles.unreadDot} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                  {!item.read && <View style={styles.unreadDot} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -203,5 +222,40 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: Colors.oliveGreen,
     marginTop: 6,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  emptyStateCard: {
+    alignItems: 'center',
+    backgroundColor: Colors.softCream,
+    borderRadius: BorderRadius.xl,
+    paddingVertical: Spacing.xxxl,
+    paddingHorizontal: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.sandBeige,
+    ...Shadows.soft,
+  },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EBF2DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  emptyTitle: {
+    fontSize: Typography.fontSizes.lg,
+    fontWeight: '700',
+    color: Colors.charcoal,
+    marginBottom: Spacing.xs,
+  },
+  emptySubtitle: {
+    fontSize: Typography.fontSizes.sm,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

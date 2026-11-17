@@ -473,7 +473,7 @@ export const FarmRepo = {
   },
 
   markAllAlertsRead(farmId: number): void {
-    db.prepare('UPDATE alerts SET read = 1 WHERE farm_id = ?').run(farmId);
+    db.prepare('DELETE FROM alerts WHERE farm_id = ?').run(farmId);
   },
 
   getChatMessages(farmId: number, limit = 50): ChatMessageRow[] {
