@@ -128,6 +128,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [notifications, setNotifications] = useState<NotificationItem[]>(FALLBACK_NOTIFICATIONS);
   const [chatMessages, setChatMessages] = useState<ApiChatMessage[]>(FALLBACK_CHAT);
   const [chatSending, setChatSending] = useState(false);
+
+  const dedupeMessages = (list: ApiChatMessage[]): ApiChatMessage[] => {
+    const seen = new Set<string>();
+    const out: ApiChatMessage[] = [];
+    for (const item of list) {
+      if (!item || !item.id || seen.has(item.id)) continue;
+      seen.add(item.id);
+      out.push(item);
+    }
+    return out;
+  };
   const [geminiConfigured, setGeminiConfigured] = useState(false);
   const [geminiModel, setGeminiModel] = useState('gemini-3.8-flash');
   const [assistantLanguage, setAssistantLanguage] = useState('en');
@@ -181,7 +192,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           read: a.read,
         }))
       );
-      setChatMessages(chatRes);
+      setChatMessages((prev) => {
+        const hasPendingLocal = prev.some((m) => m.id.startsWith('local-u-'));
+        if (hasPendingLocal) {
+          const pending = prev.filter((m) => m.id.startsWith('local-u-'));
+          return dedupeMessages([...chatRes, ...pending]);
+        }
+        return dedupeMessages(chatRes);
+      });
       setGeminiConfigured(aiStatus.configured);
       setGeminiModel(aiStatus.model);
       setBackendConnected(true);
@@ -343,11 +361,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const res = await RootSenseApi.sendAssistantChat(clean, activeLang);
-      setChatMessages((prev) => [
-        ...prev.filter((m) => m.id !== optimisticUser.id),
-        res.userMessage,
-        res.assistantMessage,
-      ]);
+      setChatMessages((prev) =>
+        dedupeMessages([
+          ...prev.filter((m) => m.id !== optimisticUser.id),
+          res.userMessage,
+          res.assistantMessage,
+        ])
+      );
       if (res.engine === 'gemini-live') {
         setGeminiConfigured(true);
       }

@@ -140,11 +140,11 @@ export default function AssistantScreen() {
           contentContainerStyle={styles.chatContent}
           showsVerticalScrollIndicator={false}
         >
-          {chatMessages.map((m) => {
+          {chatMessages.map((m, idx) => {
             const isUser = m.sender === 'user';
             return (
               <View
-                key={m.id}
+                key={`${m.id}-${idx}`}
                 style={[
                   styles.messageRow,
                   isUser ? styles.userRow : styles.assistantRow,

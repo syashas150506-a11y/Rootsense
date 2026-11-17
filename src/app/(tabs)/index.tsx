@@ -5,7 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ImageBackground,
+  Image,
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -68,11 +68,12 @@ export default function HomeDashboardScreen() {
   const irrigationDecision = waterRequirement?.decision || 'WAIT';
 
   return (
-    <ImageBackground
-      source={require('../../../assets/home-bg.jpg')}
-      style={styles.backgroundImage}
-      resizeMode="cover"
-    >
+    <View style={styles.backgroundImage}>
+      <Image
+        source={require('../../../assets/home-bg.jpg')}
+        style={styles.bgImageLayer}
+        resizeMode="cover"
+      />
       {/* Subtle luminous veil so typography stays crisp while terraced fields glow below */}
       <LinearGradient
         colors={[
@@ -235,7 +236,7 @@ export default function HomeDashboardScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 
@@ -243,6 +244,15 @@ const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
     backgroundColor: Colors.warmIvory,
+  },
+  bgImageLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
   },
   safeArea: {
     flex: 1,
