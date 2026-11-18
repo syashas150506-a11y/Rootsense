@@ -372,6 +372,30 @@ export interface ApiChatMessage {
   created_at: string;
 }
 
+export interface ApiCropCriticalStage {
+  stage_name: string;
+  day_start: number;
+  day_end: number;
+  criticality: 'CRITICAL' | 'HIGH' | 'MODERATE';
+  water_need: string;
+  key_risk: string;
+  action_tip: string;
+}
+
+export interface ApiSeedCalendar {
+  crop: string;
+  total_days_min: number;
+  total_days_max: number;
+  expected_yield: string;
+  sowing_window: string;
+  ideal_soil_temp: string;
+  water_requirement_total: string;
+  weather_advisory: string;
+  stages: ApiCropCriticalStage[];
+  source: 'gemini-ai-live' | 'agronomy-reference';
+  model?: string;
+}
+
 export const RootSenseApi = {
   getDashboard: () => requestJson<ApiDashboardResponse>('/api/dashboard'),
 
@@ -417,6 +441,13 @@ export const RootSenseApi = {
     requestJson<{ ok: boolean }>('/api/alerts/read-all', {
       method: 'POST',
     }),
+
+  getSeedCalendar: (crop: string) =>
+    requestJson<ApiSeedCalendar>(
+      `/api/seed-calendar?crop=${encodeURIComponent(crop)}`,
+      undefined,
+      30000
+    ),
 
   getAssistantStatus: () =>
     requestJson<{ configured: boolean; model: string }>('/api/assistant/status'),

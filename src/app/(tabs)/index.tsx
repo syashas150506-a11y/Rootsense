@@ -286,6 +286,74 @@ export default function HomeDashboardScreen() {
             </View>
           </TouchableOpacity>
 
+          {/* 4-Feature Quick Hub: Sensor Data, Irrigation Advice, Time to Stress, Seed Calendar */}
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionHeaderTitle}>Field Intelligence</Text>
+            <View style={styles.featureHubGrid}>
+              {/* 1. Sensor Data */}
+              <TouchableOpacity
+                style={styles.featureHubCard}
+                onPress={() => router.push('/sensor-data')}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.hubIconCircle, { backgroundColor: '#EBF2DB' }]}>
+                  <Ionicons name="hardware-chip-outline" size={21} color={Colors.oliveGreen} />
+                </View>
+                <Text style={styles.hubTitle}>Sensor Data</Text>
+                <Text style={styles.hubSub} numberOfLines={1}>
+                  Moisture · RH · Temp
+                </Text>
+              </TouchableOpacity>
+
+              {/* 2. Irrigation Advice */}
+              <TouchableOpacity
+                style={styles.featureHubCard}
+                onPress={() => router.push('/irrigation-advice')}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.hubIconCircle, { backgroundColor: Colors.palePeach }]}>
+                  <Ionicons name="water-outline" size={21} color={Colors.deepOlive} />
+                </View>
+                <Text style={styles.hubTitle}>Irrigation Advice</Text>
+                <Text style={styles.hubSub} numberOfLines={1}>
+                  Verdict: {irrigationDecision}
+                </Text>
+              </TouchableOpacity>
+
+              {/* 3. Time to Stress */}
+              <TouchableOpacity
+                style={styles.featureHubCard}
+                onPress={() => router.push('/time-to-stress')}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.hubIconCircle, { backgroundColor: '#FEF5E7' }]}>
+                  <Ionicons name="hourglass-outline" size={21} color="#C98A2B" />
+                </View>
+                <Text style={styles.hubTitle}>Time to Stress</Text>
+                <Text style={styles.hubSub} numberOfLines={1}>
+                  {hoursToStress !== null && hoursToStress !== undefined
+                    ? `≈ ${hoursToStress} hrs left`
+                    : healthStatus}
+                </Text>
+              </TouchableOpacity>
+
+              {/* 4. Seed Calendar */}
+              <TouchableOpacity
+                style={styles.featureHubCard}
+                onPress={() => router.push('/seed-calendar')}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.hubIconCircle, { backgroundColor: Colors.lightSage }]}>
+                  <Ionicons name="calendar-outline" size={21} color={Colors.deepOlive} />
+                </View>
+                <Text style={styles.hubTitle}>Seed Calendar</Text>
+                <Text style={styles.hubSub} numberOfLines={1}>
+                  Yield &amp; AI Stages
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Crop Health Section */}
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionHeaderTitle}>Crop Health</Text>
@@ -578,5 +646,40 @@ const styles = StyleSheet.create({
   healthStatusDesc: {
     fontSize: Typography.fontSizes.xs + 1,
     color: Colors.textSecondary,
+  },
+  featureHubGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  featureHubCard: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.soft,
+  },
+  hubIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+  hubTitle: {
+    fontSize: Typography.fontSizes.sm + 1,
+    fontWeight: '700',
+    color: Colors.charcoal,
+  },
+  hubSub: {
+    fontSize: 11,
+    color: Colors.oliveGreen,
+    fontWeight: '600',
+    marginTop: 2,
   },
 });

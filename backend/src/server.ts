@@ -29,6 +29,7 @@ import {
   forwardToFastApi,
   getFastApiBridgeStatus,
 } from './lib/fastapiBridge.js';
+import { predictSeedCalendar } from './lib/seedCalendar.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -431,6 +432,45 @@ app.get('/api/crop/time-to-stress', async (_req, res) => {
   const readings = FarmRepo.getReadingHistory(farm.id, 48);
   const weather = await fetchKarnatakaWeather(farm.location).catch(() => null);
   res.json(computeTimeToStress(farm, readings, weather));
+});
+
+// Seed Calendar & AI Critical Crop Stages Prediction
+app.get('/api/seed-calendar', async (req, res) => {
+  try {
+    const farm = FarmRepo.getActiveFarm();
+    const crop =
+      typeof req.query.crop === 'string' && req.query.crop.trim()
+        ? req.query.crop.trim()
+        : farm.crop_type;
+    const weather = await fetchKarnatakaWeather(
+      farm.location,
+      farm.latitude,
+      farm.longitude
+    ).catch(() => null);
+    const prediction = await predictSeedCalendar(crop, farm, weather);
+    res.json(prediction);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/seed-calendar/predict', async (req, res) => {
+  try {
+    const farm = FarmRepo.getActiveFarm();
+    const crop =
+      typeof req.body?.crop === 'string' && req.body.crop.trim()
+        ? req.body.crop.trim()
+        : farm.crop_type;
+    const weather = await fetchKarnatakaWeather(
+      farm.location,
+      farm.latitude,
+      farm.longitude
+    ).catch(() => null);
+    const prediction = await predictSeedCalendar(crop, farm, weather);
+    res.json(prediction);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 // Alerts Routes

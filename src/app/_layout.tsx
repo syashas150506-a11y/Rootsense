@@ -20,6 +20,10 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ animation: 'fade' }} />
           <Stack.Screen name="setup" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+          <Stack.Screen name="sensor-data" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="irrigation-advice" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="time-to-stress" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="seed-calendar" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="device/connect" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="device/searching" options={{ animation: 'slide_from_right' }} />
