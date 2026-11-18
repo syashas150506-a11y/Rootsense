@@ -351,6 +351,17 @@ const handleFastApiSensorPayload = (req: express.Request, res: express.Response)
     { water_level, water_level_cm, nitrogen, phosphorus, potassium }
   );
 
+  // Store real ESP32 Wi-Fi signal strength (RSSI) if provided
+  const signalDbm = parseOpt(body.signal_dbm ?? body.rssi);
+  if (signalDbm !== null && signalDbm <= 0 && signalDbm >= -120) {
+    FarmRepo.upsertDevice(farm.id, {
+      device_id: deviceId,
+      status: 'Online',
+      signal_dbm: Math.round(signalDbm),
+      last_sync_at: ts,
+    });
+  }
+
   if (inserted) {
     syncFieldAlerts(farm.id);
   }

@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,12 +17,43 @@ import { useFarm } from '../../context/FarmContext';
 
 export default function SensorStatusScreen() {
   const router = useRouter();
-  const { farmDetails, device, latestReading, sensorHealth, refreshAll } = useFarm();
+  const {
+    farmDetails,
+    device,
+    latestReading,
+    sensorSnapshot,
+    sensorHealth,
+    fastApiConnected,
+    fastApiUrl,
+    updateFastApiUrl,
+    refreshAll,
+  } = useFarm();
 
-  const deviceId = latestReading?.device_id || device?.device_id || farmDetails?.deviceId || 'ROOTSENSE_001';
-  const moisture = latestReading?.moisture ?? farmDetails?.soilMoisture ?? 38.5;
-  const fieldTemp = latestReading?.soil_temp ?? 27.0;
-  const fieldHumidity = latestReading?.humidity ?? 64.0;
+  const [urlInput, setUrlInput] = useState(fastApiUrl);
+  const [testingUrl, setTestingUrl] = useState(false);
+  const [urlFeedback, setUrlFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  useEffect(() => {
+    setUrlInput(fastApiUrl);
+  }, [fastApiUrl]);
+
+  const handleSaveFastApiUrl = async () => {
+    setTestingUrl(true);
+    setUrlFeedback(null);
+    const res = await updateFastApiUrl(urlInput);
+    setTestingUrl(false);
+    setUrlFeedback({ ok: res.ok, msg: res.message });
+  };
+
+  const deviceId =
+    sensorSnapshot?.device_id ||
+    latestReading?.device_id ||
+    device?.device_id ||
+    farmDetails?.deviceId ||
+    'ROOTSENSE_001';
+  const moisture = sensorSnapshot?.moisture ?? latestReading?.moisture ?? 0;
+  const fieldTemp = sensorSnapshot?.temperature ?? latestReading?.soil_temp ?? null;
+  const fieldHumidity = sensorSnapshot?.humidity ?? latestReading?.humidity ?? null;
   const signalDbm = device?.signal_dbm ?? -62;
   const ageSeconds = sensorHealth?.age_seconds;
   const lastReceivedText =
@@ -128,7 +161,8 @@ export default function SensorStatusScreen() {
               <View>
                 <Text style={styles.infoTitle}>Field Temp &amp; Humidity</Text>
                 <Text style={styles.infoSubtitle}>
-                  {fieldTemp}°C · {fieldHumidity}% RH
+                  {fieldTemp !== null ? `${fieldTemp}°C` : '--'} ·{' '}
+                  {fieldHumidity !== null ? `${fieldHumidity}% RH` : '--'}
                 </Text>
               </View>
             </View>
@@ -145,6 +179,62 @@ export default function SensorStatusScreen() {
                 <Text style={styles.infoSubtitle}>{healthLabel}</Text>
               </View>
             </View>
+          </View>
+
+          {/* 4. Direct FastAPI IoT Endpoint Connection */}
+          <View style={styles.fastApiCard}>
+            <View style={styles.fastApiHeader}>
+              <View style={styles.infoCardLeft}>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="server-outline" size={20} color={Colors.deepOlive} />
+                </View>
+                <View>
+                  <Text style={styles.infoTitle}>FastAPI IoT Endpoint</Text>
+                  <Text
+                    style={[
+                      styles.fastApiState,
+                      { color: fastApiConnected ? Colors.oliveGreen : Colors.error },
+                    ]}
+                  >
+                    {fastApiConnected ? 'Connected (/sensor-data/latest)' : 'Not reachable'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <TextInput
+              style={styles.urlInput}
+              value={urlInput}
+              onChangeText={setUrlInput}
+              placeholder="http://10.70.248.80:8000"
+              placeholderTextColor={Colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            {urlFeedback && (
+              <Text
+                style={[
+                  styles.feedbackText,
+                  { color: urlFeedback.ok ? Colors.oliveGreen : Colors.error },
+                ]}
+              >
+                {urlFeedback.msg}
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={styles.connectBtn}
+              onPress={handleSaveFastApiUrl}
+              disabled={testingUrl}
+              activeOpacity={0.85}
+            >
+              {testingUrl ? (
+                <ActivityIndicator size="small" color={Colors.pureWhite} />
+              ) : (
+                <Text style={styles.connectBtnText}>Connect &amp; Sync FastAPI</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -307,5 +397,51 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSizes.sm,
     fontWeight: '700',
     color: Colors.deepOlive,
+  },
+  fastApiCard: {
+    backgroundColor: Colors.pureWhite,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: Spacing.sm,
+    ...Shadows.soft,
+  },
+  fastApiHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  fastApiState: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  urlInput: {
+    backgroundColor: Colors.warmIvory,
+    borderWidth: 1,
+    borderColor: Colors.sandBeige,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    height: 44,
+    fontSize: 13,
+    color: Colors.charcoal,
+  },
+  feedbackText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  connectBtn: {
+    backgroundColor: Colors.oliveGreen,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  connectBtnText: {
+    color: Colors.pureWhite,
+    fontSize: 13.5,
+    fontWeight: '700',
   },
 });

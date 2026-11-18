@@ -4,6 +4,10 @@ import { FarmDetails, FieldUnit, NotificationItem } from '../types/farm';
 import { DEFAULT_FARM_DETAILS, resolveClientCoords } from '../constants/agronomyData';
 import {
   RootSenseApi,
+  FastApiClient,
+  getFastApiBaseUrl,
+  hydrateFastApiUrl,
+  setFastApiBaseUrl,
   ApiWeather,
   ApiCropStress,
   ApiWaterRequirement,
@@ -22,6 +26,9 @@ interface FarmContextType {
   loading: boolean;
   refreshing: boolean;
   backendConnected: boolean;
+  fastApiConnected: boolean;
+  fastApiUrl: string;
+  updateFastApiUrl: (url: string) => Promise<{ ok: boolean; message: string }>;
   isConfigured: boolean;
   device: ApiDeviceRow | null;
   latestReading: ApiSoilReading | null;
@@ -117,6 +124,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [backendConnected, setBackendConnected] = useState(false);
+  const [fastApiConnected, setFastApiConnected] = useState(false);
+  const [fastApiUrl, setFastApiUrlState] = useState(getFastApiBaseUrl());
 
   const [device, setDevice] = useState<ApiDeviceRow | null>(null);
   const [latestReading, setLatestReading] = useState<ApiSoilReading | null>(null);
@@ -147,6 +156,70 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [assistantLanguage, setAssistantLanguage] = useState('en');
 
   const syncFromBackend = useCallback(async () => {
+    // 1. Direct FastAPI IoT sensor query (/sensor-data/latest & /sensor-data/history)
+    // Works directly with FastAPI (:8000 or hosted URL) even if Express (:3001) is offline!
+    let fastApiLatestSnap: ApiSensorSnapshot | null = null;
+    let fastApiHistoryBuilt: ApiSoilHistoryResponse | null = null;
+    try {
+      const [faLatest, faHist] = await Promise.all([
+        FastApiClient.getLatest(),
+        FastApiClient.getHistory(60),
+      ]);
+      setFastApiConnected(true);
+
+      const latestRec = faLatest.latest_reading?.[0] || faHist.readings?.[0];
+      if (latestRec) {
+        fastApiLatestSnap = {
+          device_id: latestRec.device_id || 'ROOTSENSE_001',
+          moisture: latestRec.soil_moisture ?? null,
+          temperature: latestRec.temperature ?? null,
+          humidity: latestRec.humidity ?? null,
+          water_level: latestRec.water_level ?? null,
+          water_level_cm: latestRec.water_level_cm ?? null,
+          nitrogen: latestRec.nitrogen ?? null,
+          phosphorus: latestRec.phosphorus ?? null,
+          potassium: latestRec.potassium ?? null,
+          timestamp: latestRec.recorded_at || null,
+        };
+      }
+
+      if (Array.isArray(faHist.readings) && faHist.readings.length > 0) {
+        const chronological = [...faHist.readings].reverse();
+        const mappedReadings: ApiSoilReading[] = chronological
+          .filter((r) => typeof r.soil_moisture === 'number')
+          .map((r, i) => ({
+            id: r.id ?? i + 1,
+            farm_id: 1,
+            device_id: r.device_id || 'ROOTSENSE_001',
+            moisture: r.soil_moisture as number,
+            soil_temp: r.temperature ?? 0,
+            humidity: r.humidity ?? null,
+            timestamp: r.recorded_at,
+          }));
+
+        const byDay = new Map<string, number[]>();
+        for (const r of mappedReadings) {
+          const dayKey = (r.timestamp || '').slice(0, 10);
+          if (!dayKey) continue;
+          const arr = byDay.get(dayKey) || [];
+          arr.push(r.moisture);
+          byDay.set(dayKey, arr);
+        }
+        const dailySummary = Array.from(byDay.entries())
+          .slice(-7)
+          .map(([date, vals]) => ({
+            date,
+            dayNum: date.slice(8, 10),
+            avgMoisture: Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)),
+          }));
+
+        fastApiHistoryBuilt = { readings: mappedReadings, dailySummary };
+      }
+    } catch {
+      setFastApiConnected(false);
+    }
+
+    // 2. Express App Backend query (/api/dashboard, weather, alerts, Gemini chat)
     try {
       const [dashboard, historyRes, heatmapRes, alertsRes, chatRes, aiStatus] = await Promise.all([
         RootSenseApi.getDashboard(),
@@ -156,6 +229,29 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         RootSenseApi.getAssistantHistory(),
         RootSenseApi.getAssistantStatus(),
       ]);
+
+      // Prefer whichever sensor snapshot is newer (direct FastAPI vs Express DB)
+      const expressSnap =
+        dashboard.sensorSnapshot ||
+        (dashboard.latest
+          ? {
+              device_id: dashboard.latest.device_id,
+              moisture: dashboard.latest.moisture,
+              temperature: dashboard.latest.soil_temp,
+              humidity: dashboard.latest.humidity,
+              water_level: null,
+              water_level_cm: null,
+              nitrogen: null,
+              phosphorus: null,
+              potassium: null,
+              timestamp: dashboard.latest.timestamp,
+            }
+          : null);
+
+      const faMs = fastApiLatestSnap?.timestamp ? Date.parse(fastApiLatestSnap.timestamp) : 0;
+      const exMs = expressSnap?.timestamp ? Date.parse(expressSnap.timestamp) : 0;
+      const winningSnap =
+        fastApiLatestSnap && faMs >= exMs ? fastApiLatestSnap : expressSnap;
 
       const mappedFarm: FarmDetails = {
         name: dashboard.farm.farmer_name,
@@ -167,9 +263,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         irrigationType: dashboard.farm.irrigation_type,
         soilType: dashboard.farm.soil_type,
         cropGrown: dashboard.farm.crop_type,
-        deviceId: dashboard.device?.device_id || 'RS-KA-01',
+        deviceId: winningSnap?.device_id || dashboard.device?.device_id || 'ROOTSENSE_001',
         deviceStatus: (dashboard.device?.status as 'Online' | 'Offline') || 'Online',
-        soilMoisture: dashboard.latest?.moisture ?? 38.5,
+        soilMoisture: winningSnap?.moisture ?? dashboard.latest?.moisture ?? 0,
         timeUntilStressHours: dashboard.timeToStress?.hours_to_moderate ?? 12,
         confidence: dashboard.timeToStress?.confidence_pct ?? 82,
         configuredAt: dashboard.farm.updated_at,
@@ -177,30 +273,28 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setFarmDetails(mappedFarm);
       setDevice(dashboard.device);
-      setLatestReading(dashboard.latest);
-      setSensorSnapshot(
-        dashboard.sensorSnapshot ||
-          (dashboard.latest
-            ? {
-                device_id: dashboard.latest.device_id,
-                moisture: dashboard.latest.moisture,
-                temperature: dashboard.latest.soil_temp,
-                humidity: dashboard.latest.humidity,
-                water_level: null,
-                water_level_cm: null,
-                nitrogen: null,
-                phosphorus: null,
-                potassium: null,
-                timestamp: dashboard.latest.timestamp,
-              }
-            : null)
+      setLatestReading(
+        winningSnap && winningSnap.timestamp
+          ? {
+              id: dashboard.latest?.id ?? 1,
+              farm_id: dashboard.farm.id,
+              device_id: winningSnap.device_id || 'ROOTSENSE_001',
+              moisture: winningSnap.moisture ?? 0,
+              soil_temp: winningSnap.temperature ?? 0,
+              humidity: winningSnap.humidity ?? null,
+              timestamp: winningSnap.timestamp,
+            }
+          : dashboard.latest
       );
+      setSensorSnapshot(winningSnap);
       setSensorHealth(dashboard.sensorHealth);
       setWeather(dashboard.weather);
       setCropStress(dashboard.cropStress);
       setWaterRequirement(dashboard.waterRequirement);
       setTimeToStress(dashboard.timeToStress);
-      setSoilHistory(historyRes);
+      setSoilHistory(
+        historyRes.readings.length > 0 ? historyRes : fastApiHistoryBuilt || historyRes
+      );
       setHeatmap(heatmapRes);
       setNotifications(
         alertsRes.map((a) => ({
@@ -226,12 +320,68 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(mappedFarm)).catch(() => {});
     } catch {
       setBackendConnected(false);
+
+      // Even if Express (:3001) is offline, push live FastAPI sensor data straight to Home & Soil!
+      if (fastApiLatestSnap) {
+        setSensorSnapshot(fastApiLatestSnap);
+        if (fastApiLatestSnap.timestamp) {
+          const ageSec = Math.max(
+            0,
+            Math.round((Date.now() - Date.parse(fastApiLatestSnap.timestamp)) / 1000)
+          );
+          const ageMin = ageSec / 60;
+          const status: ApiSensorHealth['status'] =
+            ageMin <= 2 ? 'green' : ageMin <= 10 ? 'yellow' : 'red';
+          setSensorHealth({
+            status,
+            label: status === 'green' ? 'Online' : status === 'yellow' ? 'Delayed' : 'Offline',
+            last_seen: fastApiLatestSnap.timestamp,
+            age_seconds: ageSec,
+            message: 'Connected directly to FastAPI IoT backend.',
+          });
+          setLatestReading({
+            id: 1,
+            farm_id: 1,
+            device_id: fastApiLatestSnap.device_id || 'ROOTSENSE_001',
+            moisture: fastApiLatestSnap.moisture ?? 0,
+            soil_temp: fastApiLatestSnap.temperature ?? 0,
+            humidity: fastApiLatestSnap.humidity ?? null,
+            timestamp: fastApiLatestSnap.timestamp,
+          });
+        }
+        if (typeof fastApiLatestSnap.moisture === 'number') {
+          const m = fastApiLatestSnap.moisture;
+          setCropStress({
+            status: m < 22 ? 'High' : m < 32 ? 'Moderate' : 'Healthy',
+            reason: m < 22 ? 'BELOW_CRITICAL' : m < 32 ? 'BELOW_WARNING' : 'OPTIMAL_BAND',
+            note:
+              m < 30
+                ? `Soil moisture (${m}%) is low — water needed.`
+                : `Your crop is in good condition (${m}% moisture).`,
+            thresholds: { lowCritical: 22, lowWarn: 32, highWarn: 75 },
+          });
+          setFarmDetails((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  deviceId: fastApiLatestSnap?.device_id || prev.deviceId,
+                  soilMoisture: m,
+                }
+              : prev
+          );
+        }
+      }
+      if (fastApiHistoryBuilt) {
+        setSoilHistory(fastApiHistoryBuilt);
+      }
     }
   }, []);
 
   useEffect(() => {
     const init = async () => {
       try {
+        const savedFaUrl = await hydrateFastApiUrl();
+        setFastApiUrlState(savedFaUrl);
         const cached = await AsyncStorage.getItem(STORAGE_KEY);
         if (cached) {
           setFarmDetails(JSON.parse(cached));
@@ -296,14 +446,49 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const recordSoilReading = async (moisture: number, soilTemp = 27.0) => {
+  const updateFastApiUrl = async (url: string): Promise<{ ok: boolean; message: string }> => {
+    const saved = await setFastApiBaseUrl(url);
+    setFastApiUrlState(saved);
     try {
-      await RootSenseApi.postSoilReading(moisture, soilTemp);
+      const health = await FastApiClient.getHealth();
+      setFastApiConnected(true);
       await syncFromBackend();
-    } catch {
-      setFarmDetails((prev) => (prev ? { ...prev, soilMoisture: moisture } : prev));
-      setBackendConnected(false);
+      return {
+        ok: true,
+        message: `${health.message} (${health.database})`,
+      };
+    } catch (err) {
+      setFastApiConnected(false);
+      return {
+        ok: false,
+        message: `Saved ${saved}, but could not reach it: ${(err as Error).message}`,
+      };
     }
+  };
+
+  const recordSoilReading = async (moisture: number, soilTemp = 27.0) => {
+    let savedAnywhere = false;
+    try {
+      await FastApiClient.postSensorData({
+        device_id: sensorSnapshot?.device_id || farmDetails?.deviceId || 'ROOTSENSE_001',
+        soil_moisture: moisture,
+        temperature: soilTemp,
+        humidity: sensorSnapshot?.humidity ?? 60.0,
+      });
+      savedAnywhere = true;
+    } catch {
+      // fallback to Express
+    }
+    try {
+      await RootSenseApi.postSoilReading(moisture, soilTemp, sensorSnapshot?.humidity ?? 60.0);
+      savedAnywhere = true;
+    } catch {
+      if (!savedAnywhere) {
+        setFarmDetails((prev) => (prev ? { ...prev, soilMoisture: moisture } : prev));
+        setBackendConnected(false);
+      }
+    }
+    await syncFromBackend();
   };
 
   const resetFarmDetails = async () => {
@@ -429,6 +614,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         refreshing,
         backendConnected,
+        fastApiConnected,
+        fastApiUrl,
+        updateFastApiUrl,
         isConfigured,
         device,
         latestReading,
