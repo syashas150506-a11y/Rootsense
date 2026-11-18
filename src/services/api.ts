@@ -192,10 +192,24 @@ export interface ApiTimeToStress {
   projection: Array<{ hours_ahead: number; moisture: number }>;
 }
 
+export interface ApiSensorSnapshot {
+  device_id: string | null;
+  moisture: number | null;
+  temperature: number | null;
+  humidity: number | null;
+  water_level: number | null;
+  water_level_cm: number | null;
+  nitrogen: number | null;
+  phosphorus: number | null;
+  potassium: number | null;
+  timestamp: string | null;
+}
+
 export interface ApiDashboardResponse {
   farm: ApiFarmRow;
   device: ApiDeviceRow;
   latest: ApiSoilReading | null;
+  sensorSnapshot?: ApiSensorSnapshot;
   sensorHealth: ApiSensorHealth;
   weather: ApiWeather;
   cropStress: ApiCropStress;

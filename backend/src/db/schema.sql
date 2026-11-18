@@ -36,9 +36,14 @@ CREATE TABLE IF NOT EXISTS soil_readings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   farm_id INTEGER NOT NULL,
   device_id TEXT NOT NULL,
-  moisture REAL NOT NULL,
-  soil_temp REAL NOT NULL DEFAULT 27.0,
+  moisture REAL,
+  soil_temp REAL,
   humidity REAL,
+  water_level REAL,
+  water_level_cm REAL,
+  nitrogen REAL,
+  phosphorus REAL,
+  potassium REAL,
   timestamp TEXT NOT NULL,
   FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE
 );

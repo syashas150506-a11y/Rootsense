@@ -45,7 +45,25 @@ export interface SoilReadingRow {
   moisture: number;
   soil_temp: number;
   humidity: number | null;
+  water_level: number | null;
+  water_level_cm: number | null;
+  nitrogen: number | null;
+  phosphorus: number | null;
+  potassium: number | null;
   timestamp: string;
+}
+
+export interface SensorSnapshot {
+  device_id: string | null;
+  moisture: number | null;
+  temperature: number | null;
+  humidity: number | null;
+  water_level: number | null;
+  water_level_cm: number | null;
+  nitrogen: number | null;
+  phosphorus: number | null;
+  potassium: number | null;
+  timestamp: string | null;
 }
 
 export interface AlertRow {
@@ -86,10 +104,13 @@ const schemaPath = path.join(__dirname, 'schema.sql');
 const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
 db.exec(schemaSql);
 
-// Safe column migration for existing databases created before humidity column existed
+// Safe column migration for existing databases
 const soilCols = db.prepare('PRAGMA table_info(soil_readings)').all() as Array<{ name?: string }>;
-if (!soilCols.some((c) => c.name === 'humidity')) {
-  db.exec('ALTER TABLE soil_readings ADD COLUMN humidity REAL;');
+const existingColSet = new Set(soilCols.map((c) => c.name));
+for (const colName of ['humidity', 'water_level', 'water_level_cm', 'nitrogen', 'phosphorus', 'potassium']) {
+  if (!existingColSet.has(colName)) {
+    db.exec(`ALTER TABLE soil_readings ADD COLUMN ${colName} REAL;`);
+  }
 }
 
 export function getDbPath(): string {
@@ -384,14 +405,35 @@ export const FarmRepo = {
     moisture: number,
     soilTemp: number,
     timestamp: string,
-    humidity: number | null = null
+    humidity: number | null = null,
+    extras?: {
+      water_level?: number | null;
+      water_level_cm?: number | null;
+      nitrogen?: number | null;
+      phosphorus?: number | null;
+      potassium?: number | null;
+    }
   ): SoilReadingRow {
     const res = db
       .prepare(
-        `INSERT INTO soil_readings (farm_id, device_id, moisture, soil_temp, humidity, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO soil_readings (
+          farm_id, device_id, moisture, soil_temp, humidity,
+          water_level, water_level_cm, nitrogen, phosphorus, potassium, timestamp
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(farmId, deviceId, moisture, soilTemp, humidity, timestamp);
+      .run(
+        farmId,
+        deviceId,
+        moisture,
+        soilTemp,
+        humidity,
+        extras?.water_level ?? null,
+        extras?.water_level_cm ?? null,
+        extras?.nitrogen ?? null,
+        extras?.phosphorus ?? null,
+        extras?.potassium ?? null,
+        timestamp
+      );
 
     // Keep device record synced with live hardware device_id and latest sync timestamp
     const existingDevice = this.getDevice(farmId);
@@ -418,7 +460,14 @@ export const FarmRepo = {
     moisture: number,
     soilTemp: number,
     timestamp: string,
-    humidity: number | null = null
+    humidity: number | null = null,
+    extras?: {
+      water_level?: number | null;
+      water_level_cm?: number | null;
+      nitrogen?: number | null;
+      phosphorus?: number | null;
+      potassium?: number | null;
+    }
   ): { inserted: boolean; row: SoilReadingRow } {
     const existing = db
       .prepare(
@@ -432,8 +481,55 @@ export const FarmRepo = {
       return { inserted: false, row: existing };
     }
 
-    const row = this.insertReading(farmId, deviceId, moisture, soilTemp, timestamp, humidity);
+    const row = this.insertReading(farmId, deviceId, moisture, soilTemp, timestamp, humidity, extras);
     return { inserted: true, row };
+  },
+
+  getLatestSensorSnapshot(farmId: number): SensorSnapshot {
+    const latest = this.getLatestReading(farmId);
+    if (!latest) {
+      return {
+        device_id: null,
+        moisture: null,
+        temperature: null,
+        humidity: null,
+        water_level: null,
+        water_level_cm: null,
+        nitrogen: null,
+        phosphorus: null,
+        potassium: null,
+        timestamp: null,
+      };
+    }
+
+    const pickLatestNonNull = (col: string): number | null => {
+      const row = db
+        .prepare(
+          `SELECT ${col} as val FROM soil_readings
+           WHERE farm_id = ? AND ${col} IS NOT NULL
+           ORDER BY timestamp DESC, id DESC LIMIT 1`
+        )
+        .get(farmId) as { val?: number | null } | undefined;
+      return typeof row?.val === 'number' ? row.val : null;
+    };
+
+    return {
+      device_id: latest.device_id,
+      moisture: typeof latest.moisture === 'number' ? latest.moisture : pickLatestNonNull('moisture'),
+      temperature: typeof latest.soil_temp === 'number' ? latest.soil_temp : pickLatestNonNull('soil_temp'),
+      humidity: typeof latest.humidity === 'number' ? latest.humidity : pickLatestNonNull('humidity'),
+      water_level: typeof latest.water_level === 'number' ? latest.water_level : pickLatestNonNull('water_level'),
+      water_level_cm:
+        typeof latest.water_level_cm === 'number'
+          ? latest.water_level_cm
+          : pickLatestNonNull('water_level_cm'),
+      nitrogen: typeof latest.nitrogen === 'number' ? latest.nitrogen : pickLatestNonNull('nitrogen'),
+      phosphorus:
+        typeof latest.phosphorus === 'number' ? latest.phosphorus : pickLatestNonNull('phosphorus'),
+      potassium:
+        typeof latest.potassium === 'number' ? latest.potassium : pickLatestNonNull('potassium'),
+      timestamp: latest.timestamp,
+    };
   },
 
   getLatestReading(farmId: number): SoilReadingRow | undefined {

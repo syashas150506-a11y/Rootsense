@@ -93,6 +93,7 @@ app.get('/api/dashboard', async (_req, res) => {
     const device = FarmRepo.getDevice(farm.id) || FarmRepo.upsertDevice(farm.id, {});
     const history = FarmRepo.getReadingHistory(farm.id, 48);
     const latest = history[history.length - 1];
+    const sensorSnapshot = FarmRepo.getLatestSensorSnapshot(farm.id);
     const weather = await fetchKarnatakaWeather(farm.location, farm.latitude, farm.longitude);
     const sensorHealth = evaluateSensorHealth(latest);
     const cropStress = evaluateCropStress(farm, latest, weather);
@@ -105,6 +106,7 @@ app.get('/api/dashboard', async (_req, res) => {
       farm,
       device,
       latest: latest || null,
+      sensorSnapshot,
       sensorHealth,
       weather,
       cropStress,
@@ -281,20 +283,55 @@ app.post('/api/soil/reading', async (req, res) => {
   res.status(201).json(saved);
 });
 
+// Dedicated Live Sensor Snapshot Endpoint (from SQLite / FastAPI / Supabase)
+app.get('/api/sensors/latest', async (_req, res) => {
+  const farm = FarmRepo.getActiveFarm();
+  await syncFromFastApi(farm.id, () => syncFieldAlerts(farm.id));
+  const latest = FarmRepo.getLatestReading(farm.id);
+  const snapshot = FarmRepo.getLatestSensorSnapshot(farm.id);
+  const health = evaluateSensorHealth(latest);
+  res.json({
+    ...snapshot,
+    sensor_status: health.status,
+    sensor_label: health.label,
+    age_seconds: health.age_seconds,
+    telemetry_bridge: getFastApiBridgeStatus(),
+  });
+});
+
 // FastAPI-compatible hardware telemetry endpoint: POST /api/sensor-data & POST /sensor-data
 const handleFastApiSensorPayload = (req: express.Request, res: express.Response) => {
   const farm = FarmRepo.getActiveFarm();
   const body = req.body || {};
-  const numMoisture = Number(body.soil_moisture ?? body.moisture);
-  const numTemp = Number(body.temperature ?? body.soil_temp ?? 27.0);
-  const numHumidity =
-    body.humidity !== undefined && body.humidity !== null ? Number(body.humidity) : null;
+  const parseOpt = (v: unknown): number | null => {
+    if (v === undefined || v === null || v === '') return null;
+    const n = Number(v);
+    return Number.isNaN(n) ? null : Number(n.toFixed(1));
+  };
 
-  if (Number.isNaN(numMoisture) || numMoisture < 0 || numMoisture > 100) {
-    res.status(400).json({ error: 'soil_moisture must be between 0 and 100' });
+  const moisture = parseOpt(body.soil_moisture ?? body.moisture);
+  const temperature = parseOpt(body.temperature ?? body.soil_temp ?? body.temp);
+  const humidity = parseOpt(body.humidity);
+  const water_level = parseOpt(body.water_level ?? body.waterLevel);
+  const water_level_cm = parseOpt(body.water_level_cm ?? body.waterLevelCm);
+  const nitrogen = parseOpt(body.nitrogen ?? body.n ?? body.N);
+  const phosphorus = parseOpt(body.phosphorus ?? body.p ?? body.P);
+  const potassium = parseOpt(body.potassium ?? body.k ?? body.K);
+
+  if (
+    moisture === null &&
+    temperature === null &&
+    humidity === null &&
+    water_level === null &&
+    nitrogen === null &&
+    phosphorus === null &&
+    potassium === null
+  ) {
+    res.status(400).json({ error: 'At least one sensor field is required' });
     return;
   }
 
+  const latestExisting = FarmRepo.getLatestReading(farm.id);
   const deviceId =
     typeof body.device_id === 'string' && body.device_id.trim()
       ? body.device_id.trim()
@@ -307,12 +344,11 @@ const handleFastApiSensorPayload = (req: express.Request, res: express.Response)
   const { inserted, row } = FarmRepo.insertReadingIfNew(
     farm.id,
     deviceId,
-    Number(numMoisture.toFixed(1)),
-    Number.isNaN(numTemp) ? 27.0 : Number(numTemp.toFixed(1)),
+    moisture ?? latestExisting?.moisture ?? 0,
+    temperature ?? latestExisting?.soil_temp ?? 0,
     ts,
-    numHumidity !== null && !Number.isNaN(numHumidity)
-      ? Number(Math.max(0, Math.min(100, numHumidity)).toFixed(1))
-      : null
+    humidity,
+    { water_level, water_level_cm, nitrogen, phosphorus, potassium }
   );
 
   if (inserted) {
@@ -322,7 +358,8 @@ const handleFastApiSensorPayload = (req: express.Request, res: express.Response)
   res.status(201).json({
     message: 'Sensor data synced to Root Sense app backend',
     inserted,
-    irrigation_status: numMoisture < 30 ? 'WATER NEEDED' : 'SOIL MOISTURE OK',
+    irrigation_status:
+      moisture !== null ? (moisture < 30 ? 'WATER NEEDED' : 'SOIL MOISTURE OK') : 'UNKNOWN',
     data: row,
   });
 };
@@ -550,5 +587,5 @@ app.listen(PORT, '0.0.0.0', () => {
     void syncFromFastApi(activeFarm.id, () => syncFieldAlerts(activeFarm.id), true);
   };
   runBridgeSync();
-  setInterval(runBridgeSync, 5000);
+  setInterval(runBridgeSync, 3000);
 });

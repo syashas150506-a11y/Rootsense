@@ -16,6 +16,15 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../consta
 import { WheatStalkGraphic } from '../../components/WheatStalkGraphic';
 import { useFarm } from '../../context/FarmContext';
 
+function formatSensorAge(ageSeconds: number | null | undefined): string {
+  if (ageSeconds === null || ageSeconds === undefined) return 'Waiting for sensor';
+  if (ageSeconds < 60) return `Updated ${ageSeconds}s ago`;
+  const mins = Math.floor(ageSeconds / 60);
+  if (mins < 60) return `Updated ${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  return `Updated ${hrs}h ago`;
+}
+
 export default function HomeDashboardScreen() {
   const router = useRouter();
   const {
@@ -26,15 +35,18 @@ export default function HomeDashboardScreen() {
     cropStress,
     waterRequirement,
     timeToStress,
+    sensorSnapshot,
+    sensorHealth,
     latestReading,
-    soilHistory,
     refreshing,
     refreshAll,
   } = useFarm();
 
   const firstName = getFirstName();
   const location = farmDetails?.location || 'Tumakuru, Karnataka';
-  const temp = weather?.temp;
+
+  // Live Open-Meteo outdoor weather
+  const weatherTemp = weather?.temp;
   const condition = weather?.condition || 'Loading weather...';
   const weatherIconName =
     weather?.icon === 'sunny'
@@ -44,28 +56,38 @@ export default function HomeDashboardScreen() {
       : weather?.icon === 'cloudy'
       ? 'cloudy'
       : 'partly-sunny';
-  const latestFromHistory = soilHistory?.readings?.[soilHistory.readings.length - 1];
-  const activeReading = latestReading || latestFromHistory;
-  const soilTemp = activeReading?.soil_temp ?? 27;
-  const humidity =
-    activeReading?.humidity !== null && activeReading?.humidity !== undefined
-      ? Math.round(activeReading.humidity)
-      : weather?.humidity ?? 64;
-  const windSpeed = weather?.wind_speed ?? 0;
-  const rainProb = weather?.rain_prob ?? 0;
-  const moisture = activeReading?.moisture ?? farmDetails?.soilMoisture ?? 38.5;
-  const hoursToStress = timeToStress?.hours_to_moderate ?? farmDetails?.timeUntilStressHours ?? 12;
+  const windSpeed = weather?.wind_speed;
+  const rainProb = weather?.rain_prob;
+  const weatherHumidity = weather?.humidity;
 
-  const healthStatus = cropStress?.status || 'Healthy';
-  const healthNote = cropStress?.note || 'Your crop is in good condition.';
+  // Real sensor readings collected directly from the database (no mock numbers)
+  const sensorMoisture = sensorSnapshot?.moisture ?? latestReading?.moisture ?? null;
+  const sensorTemperature = sensorSnapshot?.temperature ?? latestReading?.soil_temp ?? null;
+  const sensorHumidity = sensorSnapshot?.humidity ?? latestReading?.humidity ?? null;
+  const sensorDeviceId = sensorSnapshot?.device_id || latestReading?.device_id || 'ROOTSENSE_001';
+  const sensorAgeLabel = formatSensorAge(sensorHealth?.age_seconds);
+  const sensorDotColor =
+    sensorHealth?.status === 'green'
+      ? Colors.oliveGreen
+      : sensorHealth?.status === 'yellow'
+      ? '#C98A2B'
+      : sensorHealth?.status === 'red'
+      ? Colors.error
+      : Colors.mutedGrey;
+
+  const hoursToStress = timeToStress?.hours_to_moderate;
+  const healthStatus = cropStress?.status || 'Unknown';
+  const healthNote = cropStress?.note || 'Waiting for live soil sensor reading.';
   const healthColor =
     healthStatus === 'High'
       ? Colors.error
       : healthStatus === 'Moderate'
       ? '#C98A2B'
-      : Colors.oliveGreen;
+      : healthStatus === 'Healthy'
+      ? Colors.oliveGreen
+      : Colors.mutedGrey;
 
-  const irrigationDecision = waterRequirement?.decision || 'WAIT';
+  const irrigationDecision = waterRequirement?.decision || 'UNKNOWN';
 
   return (
     <View style={styles.backgroundImage}>
@@ -74,7 +96,6 @@ export default function HomeDashboardScreen() {
         style={styles.bgImageLayer}
         resizeMode="cover"
       />
-      {/* Subtle luminous veil so typography stays crisp while terraced fields glow below */}
       <LinearGradient
         colors={[
           'rgba(253, 242, 233, 0.52)',
@@ -110,7 +131,6 @@ export default function HomeDashboardScreen() {
               </View>
             </View>
 
-            {/* Bell Icon with badge */}
             <TouchableOpacity
               style={styles.bellButton}
               onPress={() => router.push('/notifications')}
@@ -121,12 +141,95 @@ export default function HomeDashboardScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Weather Card */}
-          <View style={styles.weatherCard}>
+          {/* Live Field Sensor Telemetry Section (Moisture, Temperature & Humidity from DB) */}
+          <View style={styles.sectionContainer}>
+            <View style={styles.sensorSectionHeader}>
+              <Text style={styles.sectionHeaderTitle}>Live Field Sensors</Text>
+              <TouchableOpacity
+                style={styles.deviceStatusChip}
+                onPress={() => router.push('/device/status')}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.liveDot, { backgroundColor: sensorDotColor }]} />
+                <Text style={styles.deviceChipText}>
+                  {sensorDeviceId} · {sensorAgeLabel}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.sensorCardsRow}>
+              {/* 1. Moisture (from DB sensor) */}
+              <TouchableOpacity
+                style={styles.sensorCard}
+                onPress={() => router.push('/(tabs)/soil')}
+                activeOpacity={0.85}
+              >
+                <View style={styles.sensorIconCircle}>
+                  <Ionicons name="water" size={18} color={Colors.oliveGreen} />
+                </View>
+                <Text style={styles.sensorLabel}>Moisture</Text>
+                <Text style={styles.sensorValue}>
+                  {sensorMoisture !== null ? `${sensorMoisture}%` : '--'}
+                </Text>
+                <Text style={styles.sensorSub}>
+                  {sensorMoisture !== null
+                    ? hoursToStress !== null && hoursToStress !== undefined
+                      ? `≈ ${hoursToStress}h stress`
+                      : healthStatus
+                    : 'No reading'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* 2. Temperature (from DB sensor) */}
+              <TouchableOpacity
+                style={styles.sensorCard}
+                onPress={() => router.push('/device/status')}
+                activeOpacity={0.85}
+              >
+                <View style={styles.sensorIconCircle}>
+                  <Ionicons name="thermometer-outline" size={18} color={Colors.deepOlive} />
+                </View>
+                <Text style={styles.sensorLabel}>Temperature</Text>
+                <Text style={styles.sensorValue}>
+                  {sensorTemperature !== null ? `${sensorTemperature}°C` : '--'}
+                </Text>
+                <Text style={styles.sensorSub}>
+                  {sensorTemperature !== null ? 'Field probe' : 'No reading'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* 3. Humidity (from DB sensor) */}
+              <TouchableOpacity
+                style={styles.sensorCard}
+                onPress={() => router.push('/device/status')}
+                activeOpacity={0.85}
+              >
+                <View style={styles.sensorIconCircle}>
+                  <Ionicons name="water-outline" size={18} color={Colors.deepOlive} />
+                </View>
+                <Text style={styles.sensorLabel}>Humidity</Text>
+                <Text style={styles.sensorValue}>
+                  {sensorHumidity !== null ? `${sensorHumidity}%` : '--'}
+                </Text>
+                <Text style={styles.sensorSub}>
+                  {sensorHumidity !== null ? 'Field RH' : 'No reading'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Weather Card (Real-Time Open-Meteo) */}
+          <TouchableOpacity
+            style={styles.weatherCard}
+            onPress={() => router.push('/(tabs)/weather')}
+            activeOpacity={0.9}
+          >
             <View style={styles.weatherHeaderRow}>
               <View style={styles.tempColumn}>
                 <View style={styles.tempRow}>
-                  <Text style={styles.tempText}>{temp !== undefined ? `${temp}°` : '--°'}</Text>
+                  <Text style={styles.tempText}>
+                    {weatherTemp !== undefined ? `${weatherTemp}°` : '--°'}
+                  </Text>
                   <Ionicons
                     name={weatherIconName as any}
                     size={28}
@@ -138,45 +241,50 @@ export default function HomeDashboardScreen() {
               </View>
 
               <View style={styles.wheatGraphicWrapper}>
-                <WheatStalkGraphic size={90} />
+                <WheatStalkGraphic size={86} />
               </View>
             </View>
 
-            {/* 4 Metric Pills (2x2 Grid) */}
             <View style={styles.metricsGrid}>
               <View style={styles.metricPill}>
-                <Ionicons name="thermometer-outline" size={18} color={Colors.deepOlive} />
+                <Ionicons name="water-outline" size={17} color={Colors.deepOlive} />
                 <View style={styles.metricTextGroup}>
-                  <Text style={styles.metricLabel}>Soil Temp</Text>
-                  <Text style={styles.metricValue}>+{Math.round(soilTemp)} °C</Text>
+                  <Text style={styles.metricLabel}>Air Humidity</Text>
+                  <Text style={styles.metricValue}>
+                    {weatherHumidity !== undefined ? `${weatherHumidity}%` : '--'}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.metricPill}>
-                <Ionicons name="water-outline" size={18} color={Colors.deepOlive} />
-                <View style={styles.metricTextGroup}>
-                  <Text style={styles.metricLabel}>Humidity</Text>
-                  <Text style={styles.metricValue}>{humidity}%</Text>
-                </View>
-              </View>
-
-              <View style={styles.metricPill}>
-                <Ionicons name="speedometer-outline" size={18} color={Colors.deepOlive} />
+                <Ionicons name="speedometer-outline" size={17} color={Colors.deepOlive} />
                 <View style={styles.metricTextGroup}>
                   <Text style={styles.metricLabel}>Wind</Text>
-                  <Text style={styles.metricValue}>{windSpeed} m/s</Text>
+                  <Text style={styles.metricValue}>
+                    {windSpeed !== undefined ? `${windSpeed} m/s` : '--'}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.metricPill}>
-                <Ionicons name="rainy-outline" size={18} color={Colors.deepOlive} />
+                <Ionicons name="rainy-outline" size={17} color={Colors.deepOlive} />
                 <View style={styles.metricTextGroup}>
                   <Text style={styles.metricLabel}>Rain Prob.</Text>
-                  <Text style={styles.metricValue}>{rainProb}%</Text>
+                  <Text style={styles.metricValue}>
+                    {rainProb !== undefined ? `${rainProb}%` : '--'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.metricPill}>
+                <Ionicons name="leaf-outline" size={17} color={Colors.deepOlive} />
+                <View style={styles.metricTextGroup}>
+                  <Text style={styles.metricLabel}>Irrigation</Text>
+                  <Text style={styles.metricValue}>{irrigationDecision}</Text>
                 </View>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
 
           {/* Crop Health Section */}
           <View style={styles.sectionContainer}>
@@ -201,37 +309,6 @@ export default function HomeDashboardScreen() {
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={20} color={Colors.mutedGrey} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Quick Live Moisture & Irrigation Glance Cards */}
-          <View style={styles.quickCardsRow}>
-            <TouchableOpacity
-              style={styles.quickCard}
-              onPress={() => router.push('/(tabs)/soil')}
-              activeOpacity={0.85}
-            >
-              <View style={styles.quickIconCircle}>
-                <Ionicons name="water" size={18} color={Colors.oliveGreen} />
-              </View>
-              <Text style={styles.quickLabel}>Soil Moisture</Text>
-              <Text style={styles.quickValue}>{moisture}%</Text>
-              <Text style={styles.quickHint}>≈ {hoursToStress}h to stress</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickCard}
-              onPress={() => router.push('/(tabs)/weather')}
-              activeOpacity={0.85}
-            >
-              <View style={styles.quickIconCircle}>
-                <Ionicons name="rainy" size={18} color={Colors.deepOlive} />
-              </View>
-              <Text style={styles.quickLabel}>Irrigation</Text>
-              <Text style={styles.quickValue}>{irrigationDecision}</Text>
-              <Text style={styles.quickHint} numberOfLines={1}>
-                {farmDetails?.cropGrown || 'Ragi'} · {farmDetails?.irrigationType || 'Drip'}
-              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -269,7 +346,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   greetingText: {
     fontSize: 24,
@@ -311,13 +388,92 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: Colors.error,
   },
+  sectionContainer: {
+    marginBottom: Spacing.md,
+  },
+  sensorSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+    gap: 8,
+  },
+  sectionHeaderTitle: {
+    fontSize: Typography.fontSizes.md,
+    fontWeight: '700',
+    color: Colors.charcoal,
+  },
+  deviceStatusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(252, 238, 220, 0.92)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.sandBeige,
+    gap: 5,
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  deviceChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.deepOlive,
+  },
+  sensorCardsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  sensorCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.93)',
+    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm + 2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    ...Shadows.soft,
+  },
+  sensorIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EBF2DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  sensorLabel: {
+    fontSize: 11,
+    color: Colors.mutedGrey,
+    fontWeight: '600',
+  },
+  sensorValue: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: Colors.charcoal,
+    marginTop: 2,
+    letterSpacing: -0.3,
+  },
+  sensorSub: {
+    fontSize: 10,
+    color: Colors.oliveGreen,
+    fontWeight: '600',
+    marginTop: 2,
+    textAlign: 'center',
+  },
   weatherCard: {
     backgroundColor: 'rgba(252, 238, 220, 0.9)',
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.sandBeige,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
     ...Shadows.card,
   },
   weatherHeaderRow: {
@@ -334,7 +490,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tempText: {
-    fontSize: 38,
+    fontSize: 36,
     fontWeight: '800',
     color: Colors.charcoal,
     letterSpacing: -1,
@@ -363,7 +519,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
@@ -384,15 +540,6 @@ const styles = StyleSheet.create({
     color: Colors.charcoal,
     marginTop: 1,
   },
-  sectionContainer: {
-    marginBottom: Spacing.md,
-  },
-  sectionHeaderTitle: {
-    fontSize: Typography.fontSizes.md,
-    fontWeight: '700',
-    color: Colors.charcoal,
-    marginBottom: Spacing.sm,
-  },
   cropHealthCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -402,6 +549,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
+    marginTop: Spacing.xs,
     ...Shadows.soft,
   },
   cropHealthLeft: {
@@ -430,45 +578,5 @@ const styles = StyleSheet.create({
   healthStatusDesc: {
     fontSize: Typography.fontSizes.xs + 1,
     color: Colors.textSecondary,
-  },
-  quickCardsRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
-  quickCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.soft,
-  },
-  quickIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#EBF2DB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.xs + 2,
-  },
-  quickLabel: {
-    fontSize: Typography.fontSizes.xs,
-    color: Colors.mutedGrey,
-    fontWeight: '600',
-  },
-  quickValue: {
-    fontSize: Typography.fontSizes.xl,
-    fontWeight: '800',
-    color: Colors.charcoal,
-    marginTop: 2,
-  },
-  quickHint: {
-    fontSize: 11,
-    color: Colors.oliveGreen,
-    fontWeight: '600',
-    marginTop: 2,
   },
 });
