@@ -8,9 +8,11 @@ import {
   Modal,
   ActivityIndicator,
   TextInput,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { Header } from '../components/Header';
@@ -102,12 +104,31 @@ export default function SeedCalendarScreen() {
   const selectedOption = CROP_OPTIONS.find((c) => c.id === selectedCrop);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <Header
-        title="Seed Calendar"
-        subtitle="Growth duration, yield & AI critical stages"
-        onBack={() => router.back()}
+    <View style={styles.container}>
+      {/* Background Sunrise Seedling Photo - 100% VISIBLE */}
+      <Image
+        source={require('../../assets/seed-calendar-bg.jpg')}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
       />
+
+      {/* Gentle Morning Sunlight Gradient Tint */}
+      <LinearGradient
+        colors={[
+          'rgba(255, 255, 255, 0.08)',
+          'rgba(253, 248, 240, 0.22)',
+          'rgba(253, 248, 240, 0.60)',
+        ]}
+        locations={[0, 0.45, 0.9]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <Header
+          title="Seed Calendar"
+          subtitle="Growth duration, yield & AI critical stages"
+          onBack={() => router.back()}
+        />
 
       <ScrollView
         style={styles.scrollView}
@@ -372,13 +393,18 @@ export default function SeedCalendarScreen() {
         </TouchableOpacity>
       </Modal>
     </SafeAreaView>
-  );
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#EAE5D8',
+  },
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.warmIvory,
+    backgroundColor: 'transparent',
   },
   scrollView: {
     flex: 1,
@@ -390,12 +416,12 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   selectorCard: {
-    backgroundColor: Colors.softCream,
+    backgroundColor: 'rgba(255, 255, 255, 0.90)',
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.sandBeige,
-    ...Shadows.soft,
+    borderWidth: 1.5,
+    borderColor: 'rgba(215, 200, 175, 0.7)',
+    ...Shadows.card,
   },
   fieldLabel: {
     fontSize: 11.5,
@@ -510,11 +536,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   summaryCard: {
-    backgroundColor: Colors.pureWhite,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderWidth: 1.5,
+    borderColor: 'rgba(215, 200, 175, 0.7)',
     gap: Spacing.md,
     ...Shadows.card,
   },
@@ -628,18 +654,18 @@ const styles = StyleSheet.create({
     color: Colors.oliveGreen,
   },
   stageCard: {
-    backgroundColor: Colors.pureWhite,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
     borderRadius: BorderRadius.xl,
     padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderWidth: 1.5,
+    borderColor: 'rgba(215, 200, 175, 0.7)',
     gap: Spacing.sm,
-    ...Shadows.soft,
+    ...Shadows.card,
   },
   stageCardActive: {
     borderColor: Colors.oliveGreen,
     borderWidth: 1.5,
-    backgroundColor: '#FFFDF8',
+    backgroundColor: 'rgba(255, 254, 248, 0.96)',
   },
   stageTop: {
     flexDirection: 'row',
