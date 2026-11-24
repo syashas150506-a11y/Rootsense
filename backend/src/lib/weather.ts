@@ -188,12 +188,12 @@ export async function geocodeLocation(
     const res = await fetch(url, { signal: controller.signal });
     if (res.ok) {
       const json = (await res.json()) as {
-        results?: Array<{
+        results?: {
           name: string;
           admin1?: string;
           latitude: number;
           longitude: number;
-        }>;
+        }[];
       };
       const top = json.results?.[0];
       if (top) {
@@ -388,7 +388,7 @@ async function fetchMetNorwaySecondary(
 
     const json = (await res.json()) as {
       properties?: {
-        timeseries?: Array<{
+        timeseries?: {
           time: string;
           data: {
             instant: {
@@ -404,7 +404,7 @@ async function fetchMetNorwaySecondary(
               details?: { precipitation_amount?: number };
             };
           };
-        }>;
+        }[];
       };
     };
 

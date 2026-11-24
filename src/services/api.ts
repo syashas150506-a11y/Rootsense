@@ -299,7 +299,7 @@ export interface ApiTimeToStress {
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   confidence_pct: number;
   rain_before: boolean;
-  projection: Array<{ hours_ahead: number; moisture: number }>;
+  projection: { hours_ahead: number; moisture: number }[];
 }
 
 export interface ApiSensorSnapshot {
@@ -330,26 +330,26 @@ export interface ApiDashboardResponse {
 
 export interface ApiSoilHistoryResponse {
   readings: ApiSoilReading[];
-  dailySummary: Array<{
+  dailySummary: {
     date: string;
     dayNum: string;
     avgMoisture: number;
-  }>;
+  }[];
 }
 
 export interface ApiHeatmapResponse {
   state: 'OK' | 'INSUFFICIENT_DATA';
   moderate: number;
   high: number;
-  rows: Array<{
+  rows: {
     dayLabel: string;
     dateIso: string;
-    slots: Array<{
+    slots: {
       slot: string;
       avgMoisture: number | null;
       tone: 'empty' | 'critical' | 'warn' | 'optimal';
-    }>;
-  }>;
+    }[];
+  }[];
   driest_slot: string | null;
   insight: string;
 }

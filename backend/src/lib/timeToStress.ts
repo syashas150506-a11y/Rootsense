@@ -21,7 +21,7 @@ export interface TimeToStressResult {
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   confidence_pct: number;
   rain_before: boolean;
-  projection: Array<{ hours_ahead: number; moisture: number }>;
+  projection: { hours_ahead: number; moisture: number }[];
 }
 
 export function computeTimeToStress(
@@ -147,7 +147,7 @@ export function computeTimeToStress(
 
   let hoursToModerate: number | null = null;
   let hoursToHigh: number | null = null;
-  const projection: Array<{ hours_ahead: number; moisture: number }> = [];
+  const projection: { hours_ahead: number; moisture: number }[] = [];
 
   if (state === 'DRYING') {
     const rate = Math.abs(slope);

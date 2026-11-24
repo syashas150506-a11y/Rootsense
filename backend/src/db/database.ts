@@ -105,7 +105,7 @@ const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
 db.exec(schemaSql);
 
 // Safe column migration for existing databases
-const soilCols = db.prepare('PRAGMA table_info(soil_readings)').all() as Array<{ name?: string }>;
+const soilCols = db.prepare('PRAGMA table_info(soil_readings)').all() as { name?: string }[];
 const existingColSet = new Set(soilCols.map((c) => c.name));
 for (const colName of ['humidity', 'water_level', 'water_level_cm', 'nitrogen', 'phosphorus', 'potassium']) {
   if (!existingColSet.has(colName)) {
@@ -646,5 +646,11 @@ export const FarmRepo = {
 
   clearChatMessages(farmId: number): void {
     db.prepare('DELETE FROM chat_messages WHERE farm_id = ?').run(farmId);
+  },
+
+  pruneOldReadings(daysToKeep = 30): number {
+    const cutoff = new Date(Date.now() - daysToKeep * 86_400_000).toISOString();
+    const res = db.prepare('DELETE FROM soil_readings WHERE timestamp < ?').run(cutoff);
+    return Number(res.changes);
   },
 };

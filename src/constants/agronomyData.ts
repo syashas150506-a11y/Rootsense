@@ -134,11 +134,11 @@ export const IRRIGATION_TYPES: IrrigationOption[] = [
   },
 ];
 
-export const KARNATAKA_DISTRICT_COORDS: Array<{
+export const KARNATAKA_DISTRICT_COORDS: {
   name: string;
   latitude: number;
   longitude: number;
-}> = [
+}[] = [
   { name: 'Bengaluru Rural', latitude: 13.2846, longitude: 77.6078 },
   { name: 'Mysuru', latitude: 12.2958, longitude: 76.6394 },
   { name: 'Mandya', latitude: 12.5218, longitude: 76.8951 },

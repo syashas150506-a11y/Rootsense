@@ -24,6 +24,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~58.0.4",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -34,7 +36,8 @@
     "backend": "npm --prefix backend run dev",
     "backend:start": "npm --prefix backend run start",
     "fastapi": "Root_sense\\.venv\\Scripts\\uvicorn.exe main:app --app-dir Root_sense --host 0.0.0.0 --port 8000 --reload",
-    "db:seed": "npm --prefix backend run seed"
+    "db:seed": "npm --prefix backend run seed",
+    "lint": "expo lint"
   },
   "private": true
 }

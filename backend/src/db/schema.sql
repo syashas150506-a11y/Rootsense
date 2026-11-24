@@ -79,3 +79,22 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS idx_chat_farm_time
   ON chat_messages (farm_id, id ASC);
+
+-- Compatibility view so any client or script querying sensor_readings
+-- queries soil_readings seamlessly from the unified database
+CREATE VIEW IF NOT EXISTS sensor_readings AS
+SELECT 
+  id,
+  farm_id,
+  device_id,
+  soil_temp AS temperature,
+  humidity,
+  moisture AS soil_moisture,
+  water_level,
+  water_level_cm,
+  nitrogen,
+  phosphorus,
+  potassium,
+  timestamp AS recorded_at
+FROM soil_readings;
+

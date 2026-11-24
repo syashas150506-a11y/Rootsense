@@ -27,15 +27,15 @@
 
 // ===================== 1. WI-FI CONFIGURATION =====================
 // Connect your ESP32, Laptop, and Phone to the SAME Wi-Fi or Hotspot
-const char* WIFI_SSID     = "YOUR_WIFI_NAME";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* WIFI_SSID     = "JioFiber-UgHCg";
+const char* WIFI_PASSWORD = "Ya@150506";
 
 // ===================== 2. SERVER CONFIGURATION ====================
-// Pre-filled with your PC's current Wi-Fi IP (10.70.248.80).
-// If you switch Wi-Fi/hotspot, run `ipconfig` on your PC and update this IP.
+// Pre-filled with your PC's active Wi-Fi IP (192.168.29.186).
+// If you switch Wi-Fi/hotspot in the future, run `ipconfig` on your PC and update this IP.
 const char* DEVICE_ID     = "ROOTSENSE_001";
-const char* PRIMARY_URL   = "http://10.70.248.80:8000/sensor-data";      // FastAPI Collector
-const char* FALLBACK_URL  = "http://10.70.248.80:3001/api/sensor-data";  // Express App Backend
+const char* PRIMARY_URL   = "http://192.168.29.186:8000/sensor-data";      // FastAPI Collector
+const char* FALLBACK_URL  = "http://192.168.29.186:3001/api/sensor-data";  // Express App Backend
 
 // ===================== 3. SENSOR PIN & TYPE =======================
 #define SOIL_PIN 34        // ADC1_CH6 (DO NOT use ADC2 pins when Wi-Fi is active)

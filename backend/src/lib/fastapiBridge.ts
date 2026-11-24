@@ -152,24 +152,8 @@ async function fetchFromSupabase(): Promise<FastApiSensorRecord[] | null> {
 }
 
 function readDirectFastApiSqlite(): FastApiSensorRecord[] | null {
-  const localDbPath = path.join(ROOT_SENSE_DIR, 'sensor_readings.db');
-  if (!fs.existsSync(localDbPath)) return null;
-  let conn: DatabaseSync | null = null;
-  try {
-    conn = new DatabaseSync(localDbPath, { open: true, readOnly: true });
-    const rows = conn
-      .prepare('SELECT * FROM sensor_readings ORDER BY recorded_at DESC, id DESC LIMIT 100')
-      .all() as unknown as FastApiSensorRecord[];
-    return rows.reverse();
-  } catch {
-    return null;
-  } finally {
-    try {
-      conn?.close();
-    } catch {
-      // ignore
-    }
-  }
+  // Unified database: Both FastAPI and Express share backend/data/rootsense.db directly.
+  return null;
 }
 
 export async function syncFromFastApi(
