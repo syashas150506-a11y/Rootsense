@@ -60,14 +60,14 @@ export default function SetUpFarmScreen() {
         resizeMode="cover"
       />
 
-      {/* Gentle Sunlight & Cream Vignette Overlay for Readability */}
+      {/* Deep Warm Botanical / Charcoal Scrim for High Contrast & Visibility */}
       <LinearGradient
         colors={[
-          'rgba(253, 248, 242, 0.72)',
-          'rgba(253, 248, 242, 0.88)',
-          'rgba(253, 248, 242, 0.95)',
+          'rgba(20, 24, 18, 0.58)',
+          'rgba(14, 18, 12, 0.82)',
+          'rgba(10, 14, 8, 0.94)',
         ]}
-        locations={[0, 0.35, 0.85]}
+        locations={[0, 0.45, 0.9]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -86,7 +86,7 @@ export default function SetUpFarmScreen() {
             style={styles.backButton}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="arrow-back" size={22} color={Colors.deepOlive} />
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
@@ -141,7 +141,7 @@ export default function SetUpFarmScreen() {
                   value={farmerName}
                   onChangeText={setFarmerName}
                   placeholder="Enter farmer name"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor="#777777"
                 />
               </View>
             </View>
@@ -156,7 +156,7 @@ export default function SetUpFarmScreen() {
                   value={location}
                   onChangeText={setLocation}
                   placeholder="e.g. Tumakuru, Karnataka"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor="#777777"
                 />
               </View>
             </View>
@@ -173,7 +173,7 @@ export default function SetUpFarmScreen() {
                   <Ionicons name="leaf-outline" size={20} color={Colors.oliveGreen} style={styles.fieldIcon} />
                   <Text style={styles.selectValue}>{cropType}</Text>
                 </View>
-                <Ionicons name="chevron-down" size={18} color={Colors.mutedGrey} />
+                <Ionicons name="chevron-down" size={18} color="#444444" />
               </TouchableOpacity>
             </View>
 
@@ -189,7 +189,7 @@ export default function SetUpFarmScreen() {
                   <Ionicons name="layers-outline" size={20} color={Colors.oliveGreen} style={styles.fieldIcon} />
                   <Text style={styles.selectValue}>{soilType}</Text>
                 </View>
-                <Ionicons name="chevron-down" size={18} color={Colors.mutedGrey} />
+                <Ionicons name="chevron-down" size={18} color="#444444" />
               </TouchableOpacity>
             </View>
 
@@ -204,7 +204,7 @@ export default function SetUpFarmScreen() {
                   onChangeText={setFieldDimension}
                   placeholder="e.g. 2.5"
                   keyboardType="numeric"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor="#777777"
                 />
                 <Text style={styles.unitSuffix}>Acres</Text>
               </View>
@@ -224,7 +224,7 @@ export default function SetUpFarmScreen() {
                     {irrigationType === 'Drip' ? 'Drip Irrigation' : irrigationType}
                   </Text>
                 </View>
-                <Ionicons name="chevron-down" size={18} color={Colors.mutedGrey} />
+                <Ionicons name="chevron-down" size={18} color="#444444" />
               </TouchableOpacity>
             </View>
           </View>
@@ -352,7 +352,7 @@ export default function SetUpFarmScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.warmIvory,
+    backgroundColor: '#0E120C',
   },
   safeArea: {
     flex: 1,
@@ -370,11 +370,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.softCream,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.sandBeige,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
   },
   scrollView: {
     flex: 1,
@@ -390,8 +390,11 @@ const styles = StyleSheet.create({
   mainTitle: {
     fontSize: 26,
     fontWeight: '800',
-    color: Colors.charcoal,
+    color: '#FFFFFF',
     letterSpacing: -0.4,
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   stepRow: {
     flexDirection: 'row',
@@ -402,25 +405,31 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.sandBeige,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   stepCircleActive: {
     backgroundColor: Colors.oliveGreen,
+    borderColor: '#94B469',
   },
   stepNum: {
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.mutedGrey,
+    color: '#D0C8B8',
   },
   stepNumActive: {
     color: Colors.pureWhite,
   },
   subtitle: {
     fontSize: Typography.fontSizes.sm,
-    color: Colors.textSecondary,
+    color: '#E0D8CB',
     lineHeight: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   formContainer: {
     gap: Spacing.md,
@@ -430,19 +439,23 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: Typography.fontSizes.xs + 1,
-    fontWeight: '600',
-    color: Colors.textSecondary,
+    fontWeight: '700',
+    color: '#F4EFE6',
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    backgroundColor: 'rgba(255, 255, 255, 0.97)',
     borderRadius: BorderRadius.md,
     borderWidth: 1.5,
-    borderColor: 'rgba(224, 212, 196, 0.95)',
+    borderColor: 'rgba(255, 255, 255, 0.6)',
     paddingHorizontal: Spacing.md,
     minHeight: 52,
-    ...Shadows.soft,
+    ...Shadows.card,
   },
   fieldIcon: {
     marginRight: Spacing.sm,
@@ -450,25 +463,26 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     fontSize: Typography.fontSizes.md,
-    color: Colors.charcoal,
+    color: '#1A1D16',
+    fontWeight: '600',
     paddingVertical: Spacing.sm,
   },
   unitSuffix: {
     fontSize: Typography.fontSizes.xs + 1,
-    fontWeight: '600',
-    color: Colors.mutedGrey,
+    fontWeight: '700',
+    color: '#4A5243',
   },
   selectBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    backgroundColor: 'rgba(255, 255, 255, 0.97)',
     borderRadius: BorderRadius.md,
     borderWidth: 1.5,
-    borderColor: 'rgba(224, 212, 196, 0.95)',
+    borderColor: 'rgba(255, 255, 255, 0.6)',
     paddingHorizontal: Spacing.md,
     minHeight: 52,
-    ...Shadows.soft,
+    ...Shadows.card,
   },
   selectLeft: {
     flexDirection: 'row',
@@ -476,15 +490,15 @@ const styles = StyleSheet.create({
   },
   selectValue: {
     fontSize: Typography.fontSizes.md,
-    fontWeight: '600',
-    color: Colors.charcoal,
+    fontWeight: '700',
+    color: '#1A1D16',
   },
   bottomBar: {
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
-    backgroundColor: 'rgba(253, 248, 242, 0.94)',
+    backgroundColor: 'rgba(12, 16, 10, 0.96)',
     borderTopWidth: 1,
-    borderTopColor: Colors.sandBeige,
+    borderTopColor: 'rgba(255, 255, 255, 0.14)',
   },
   nextButton: {
     height: 52,
