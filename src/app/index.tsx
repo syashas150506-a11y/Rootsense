@@ -31,23 +31,23 @@ export default function WelcomeSplashScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Background Golden Harvest Crop Photo */}
+      {/* Background Golden Harvest Wheat Photo */}
       <View style={styles.imageContainer}>
         <Image
-          source={require('../../assets/splash-crop.jpg')}
+          source={require('../../assets/setup-bg.jpg')}
           style={styles.backgroundImage}
           resizeMode="cover"
         />
 
-        {/* Soft Golden Sunset Vignette */}
+        {/* Soft Golden Sunset Vignette - lets the full wheat basket shine through */}
         <LinearGradient
           colors={[
-            'rgba(253, 242, 233, 0.45)',
             'transparent',
+            'rgba(37, 37, 31, 0.20)',
             'rgba(37, 37, 31, 0.65)',
-            'rgba(37, 37, 31, 0.94)',
+            'rgba(28, 30, 24, 0.90)',
           ]}
-          locations={[0, 0.35, 0.65, 1]}
+          locations={[0, 0.40, 0.70, 1]}
           style={StyleSheet.absoluteFill}
         />
       </View>

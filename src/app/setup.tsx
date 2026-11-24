@@ -16,7 +16,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
-import { BotanicalCornerLeaves } from '../components/BotanicalCornerLeaves';
 import { useFarm } from '../context/FarmContext';
 import { CROPS, SOIL_TYPES, IRRIGATION_TYPES } from '../constants/agronomyData';
 
@@ -53,28 +52,25 @@ export default function SetUpFarmScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Background Golden Harvest Wheat Photo */}
+      {/* Background Golden Harvest Wheat Photo - 100% VISIBLE */}
       <Image
         source={require('../../assets/setup-bg.jpg')}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
       />
 
-      {/* Deep Warm Botanical / Charcoal Scrim for High Contrast & Visibility */}
+      {/* Gentle Sunlit Tint - allows the full wheat basket and sunbeams to shine through */}
       <LinearGradient
         colors={[
-          'rgba(20, 24, 18, 0.58)',
-          'rgba(14, 18, 12, 0.82)',
-          'rgba(10, 14, 8, 0.94)',
+          'rgba(255, 255, 255, 0.05)',
+          'rgba(253, 248, 240, 0.20)',
+          'rgba(253, 248, 240, 0.55)',
         ]}
         locations={[0, 0.45, 0.9]}
         style={StyleSheet.absoluteFill}
       />
 
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* Decorative Botanical Leaves top right */}
-        <BotanicalCornerLeaves size={120} />
-
         <KeyboardAvoidingView
           style={styles.flexOne}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -86,7 +82,7 @@ export default function SetUpFarmScreen() {
             style={styles.backButton}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+            <Ionicons name="arrow-back" size={22} color={Colors.deepOlive} />
           </TouchableOpacity>
         </View>
 
@@ -352,7 +348,7 @@ export default function SetUpFarmScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0E120C',
+    backgroundColor: '#F5EFE6',
   },
   safeArea: {
     flex: 1,
@@ -370,11 +366,12 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.28)',
+    borderColor: 'rgba(200, 185, 160, 0.6)',
+    ...Shadows.soft,
   },
   scrollView: {
     flex: 1,
@@ -388,13 +385,13 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   mainTitle: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#262D1D',
     letterSpacing: -0.4,
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowColor: 'rgba(255, 255, 255, 0.95)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 6,
   },
   stepRow: {
     flexDirection: 'row',
@@ -402,34 +399,36 @@ const styles = StyleSheet.create({
     marginVertical: Spacing.md,
   },
   stepCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(180, 165, 140, 0.6)',
+    ...Shadows.soft,
   },
   stepCircleActive: {
     backgroundColor: Colors.oliveGreen,
-    borderColor: '#94B469',
+    borderColor: Colors.deepOlive,
   },
   stepNum: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#D0C8B8',
+    color: '#656D5B',
   },
   stepNumActive: {
     color: Colors.pureWhite,
   },
   subtitle: {
-    fontSize: Typography.fontSizes.sm,
-    color: '#E0D8CB',
-    lineHeight: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    fontSize: Typography.fontSizes.sm + 0.5,
+    color: '#464C3D',
+    lineHeight: 21,
+    fontWeight: '500',
+    textShadowColor: 'rgba(255, 255, 255, 0.9)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 4,
   },
   formContainer: {
     gap: Spacing.md,
@@ -438,21 +437,21 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   fieldLabel: {
-    fontSize: Typography.fontSizes.xs + 1,
+    fontSize: Typography.fontSizes.xs + 1.5,
     fontWeight: '700',
-    color: '#F4EFE6',
-    letterSpacing: 0.3,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    color: '#242C1B',
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(255, 255, 255, 0.9)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 3,
   },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.97)',
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
     borderRadius: BorderRadius.md,
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderColor: 'rgba(215, 200, 175, 0.7)',
     paddingHorizontal: Spacing.md,
     minHeight: 52,
     ...Shadows.card,
@@ -476,10 +475,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.97)',
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
     borderRadius: BorderRadius.md,
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderColor: 'rgba(215, 200, 175, 0.7)',
     paddingHorizontal: Spacing.md,
     minHeight: 52,
     ...Shadows.card,
@@ -496,9 +495,9 @@ const styles = StyleSheet.create({
   bottomBar: {
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
-    backgroundColor: 'rgba(12, 16, 10, 0.96)',
+    backgroundColor: 'rgba(253, 248, 240, 0.92)',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.14)',
+    borderTopColor: 'rgba(215, 200, 175, 0.6)',
   },
   nextButton: {
     height: 52,
