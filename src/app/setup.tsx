@@ -9,9 +9,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { BotanicalCornerLeaves } from '../components/BotanicalCornerLeaves';
@@ -50,14 +52,33 @@ export default function SetUpFarmScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      {/* Decorative Botanical Leaves top right */}
-      <BotanicalCornerLeaves size={120} />
+    <View style={styles.container}>
+      {/* Background Golden Harvest Wheat Photo */}
+      <Image
+        source={require('../../assets/setup-bg.jpg')}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
+      />
 
-      <KeyboardAvoidingView
-        style={styles.flexOne}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      {/* Gentle Sunlight & Cream Vignette Overlay for Readability */}
+      <LinearGradient
+        colors={[
+          'rgba(253, 248, 242, 0.72)',
+          'rgba(253, 248, 242, 0.88)',
+          'rgba(253, 248, 242, 0.95)',
+        ]}
+        locations={[0, 0.35, 0.85]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        {/* Decorative Botanical Leaves top right */}
+        <BotanicalCornerLeaves size={120} />
+
+        <KeyboardAvoidingView
+          style={styles.flexOne}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
         {/* Header */}
         <View style={styles.headerRow}>
           <TouchableOpacity
@@ -324,13 +345,18 @@ export default function SetUpFarmScreen() {
         </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  );
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
     backgroundColor: Colors.warmIvory,
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   flexOne: {
     flex: 1,
@@ -410,12 +436,13 @@ const styles = StyleSheet.create({
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.pureWhite,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderRadius: BorderRadius.md,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: 'rgba(224, 212, 196, 0.95)',
     paddingHorizontal: Spacing.md,
     minHeight: 52,
+    ...Shadows.soft,
   },
   fieldIcon: {
     marginRight: Spacing.sm,
@@ -435,12 +462,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.pureWhite,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderRadius: BorderRadius.md,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: 'rgba(224, 212, 196, 0.95)',
     paddingHorizontal: Spacing.md,
     minHeight: 52,
+    ...Shadows.soft,
   },
   selectLeft: {
     flexDirection: 'row',
@@ -454,7 +482,7 @@ const styles = StyleSheet.create({
   bottomBar: {
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
-    backgroundColor: Colors.warmIvory,
+    backgroundColor: 'rgba(253, 248, 242, 0.94)',
     borderTopWidth: 1,
     borderTopColor: Colors.sandBeige,
   },
