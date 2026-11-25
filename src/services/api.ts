@@ -28,19 +28,42 @@ function resolveHostIp(): string {
 }
 
 function resolveBaseUrl(): string {
+  // If running in Expo Go on a physical phone, dynamically resolve the active Metro host IP
+  const metroHost = resolveHostIp();
+  if (
+    Platform.OS !== 'web' &&
+    metroHost &&
+    metroHost !== 'localhost' &&
+    metroHost !== '127.0.0.1' &&
+    metroHost !== '10.0.2.2'
+  ) {
+    return `http://${metroHost}:3001`;
+  }
+
   const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (envUrl) {
     return envUrl.replace(/\/$/, '');
   }
-  return `http://${resolveHostIp()}:3001`;
+  return `http://${metroHost}:3001`;
 }
 
 function resolveDefaultFastApiUrl(): string {
+  const metroHost = resolveHostIp();
+  if (
+    Platform.OS !== 'web' &&
+    metroHost &&
+    metroHost !== 'localhost' &&
+    metroHost !== '127.0.0.1' &&
+    metroHost !== '10.0.2.2'
+  ) {
+    return `http://${metroHost}:8000`;
+  }
+
   const envUrl = process.env.EXPO_PUBLIC_FASTAPI_URL?.trim();
   if (envUrl) {
     return envUrl.replace(/\/$/, '');
   }
-  return `http://${resolveHostIp()}:8000`;
+  return `http://${metroHost}:8000`;
 }
 
 const FASTAPI_URL_STORAGE_KEY = '@rootsense_fastapi_url_v1';

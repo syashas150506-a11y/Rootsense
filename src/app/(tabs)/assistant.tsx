@@ -115,6 +115,7 @@ export default function AssistantScreen() {
 
   // Pulse animation for recording ring
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const recordStartTimeRef = useRef<number>(0);
 
   const cropName = farmDetails?.cropGrown || 'Ragi';
   const soilName = farmDetails?.soilType || 'Red Loam';
@@ -203,6 +204,7 @@ export default function AssistantScreen() {
 
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
+      recordStartTimeRef.current = Date.now();
 
       setIsRecording(true);
     } catch (err) {
@@ -214,6 +216,20 @@ export default function AssistantScreen() {
   // Stop voice recording, transcribe with auto language detection, and send
   const stopVoiceRecording = async () => {
     setIsRecording(false);
+    const duration = Date.now() - recordStartTimeRef.current;
+    if (duration < 650) {
+      try {
+        await audioRecorder.stop();
+      } catch {}
+      setDetectedToast({
+        text: 'Recording was too brief. Tap mic, speak your question, then tap stop.',
+        language: 'en',
+        name: 'Notice',
+      });
+      setTimeout(() => setDetectedToast(null), 3500);
+      return;
+    }
+
     setIsTranscribing(true);
 
     try {
