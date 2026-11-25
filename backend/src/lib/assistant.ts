@@ -287,16 +287,21 @@ async function transcribeWithGemini(
     'TASK:',
     '1. Transcribe the speech verbatim into text in the original script of the spoken language (Kannada script ಕನ್ನಡ if spoken in Kannada, Devanagari script हिन्दी if spoken in Hindi, English if spoken in English, Telugu తెలుగు, Tamil தமிழ், etc.).',
     '2. Automatically detect which language was spoken.',
+    '3. If the audio contains only background noise, static, silence, or no intelligible words, return {"text": "", "language": "en", "language_name": "English"}.',
     'OUTPUT: Return strictly valid JSON with no markdown formatting:',
     '{"text": "transcribed speech in native script", "language": "kn|hi|en|te|ta|ml|mr", "language_name": "Kannada|Hindi|English|Telugu|Tamil|Malayalam|Marathi"}',
   ].join('\n');
 
+  // Prioritize active high-speed models that support audio
   const modelsToTry = [
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-2.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite',
     'gemini-3.8-flash',
+    'gemini-2.5-flash',
   ];
+
+  const safeMime = mimeType && mimeType.startsWith('audio/') ? mimeType : 'audio/m4a';
 
   for (const model of modelsToTry) {
     try {
@@ -308,7 +313,7 @@ async function transcribeWithGemini(
             parts: [
               {
                 inlineData: {
-                  mimeType: mimeType || 'audio/m4a',
+                  mimeType: safeMime,
                   data: base64Audio,
                 },
               },
@@ -328,9 +333,14 @@ async function transcribeWithGemini(
       if (resText) {
         const cleaned = resText.replace(/^```json/i, '').replace(/```$/i, '').trim();
         const parsed = JSON.parse(cleaned);
+        const text = (parsed.text || '').trim();
+        // Ignore silent or empty transcripts
+        if (!text || text.toLowerCase() === 'silence' || text.toLowerCase() === 'none') {
+          return null;
+        }
         const code = normalizeLangCode(parsed.language);
         return {
-          text: parsed.text || '',
+          text,
           language: code,
           languageName: parsed.language_name || LANGUAGE_NAMES[code] || 'Language',
         };
@@ -343,7 +353,7 @@ async function transcribeWithGemini(
   return null;
 }
 
-/** Unified Speech-to-Text API: Groq Whisper -> Gemini Audio -> Smart Script Fallback */
+/** Unified Speech-to-Text API: Groq Whisper -> Gemini Audio */
 export async function transcribeAudio(
   base64Audio: string,
   mimeType = 'audio/m4a',
@@ -356,16 +366,17 @@ export async function transcribeAudio(
   engine: string;
   error?: string;
 }> {
+  const safeMime = mimeType && mimeType.startsWith('audio/') ? mimeType : 'audio/m4a';
   const audioBuffer = Buffer.from(base64Audio, 'base64');
 
   // 1. Try Groq Whisper (Whisper-large-v3-turbo) if GROQ_API_KEY is available
   const groqKey = getGroqApiKey();
   if (groqKey) {
-    const groqResult = await transcribeWithGroq(audioBuffer, mimeType, groqKey);
-    if (groqResult && groqResult.text) {
+    const groqResult = await transcribeWithGroq(audioBuffer, safeMime, groqKey);
+    if (groqResult && groqResult.text && groqResult.text.trim()) {
       return {
         ok: true,
-        text: groqResult.text,
+        text: groqResult.text.trim(),
         language: groqResult.language,
         languageName: groqResult.languageName,
         engine: 'groq-whisper-v3',
@@ -376,11 +387,11 @@ export async function transcribeAudio(
   // 2. Try Google Gemini Multimodal Audio Transcription
   const geminiKey = getGeminiApiKey();
   if (geminiKey) {
-    const geminiResult = await transcribeWithGemini(base64Audio, mimeType, geminiKey);
-    if (geminiResult && geminiResult.text) {
+    const geminiResult = await transcribeWithGemini(base64Audio, safeMime, geminiKey);
+    if (geminiResult && geminiResult.text && geminiResult.text.trim()) {
       return {
         ok: true,
-        text: geminiResult.text,
+        text: geminiResult.text.trim(),
         language: geminiResult.language,
         languageName: geminiResult.languageName,
         engine: 'gemini-multimodal-audio',
@@ -388,14 +399,14 @@ export async function transcribeAudio(
     }
   }
 
-  // 3. Fallback when keys or external APIs are unreachable
-  const detected = detectLanguageFromText(requestedLang || '');
+  // 3. If speech was not recognized or audio was empty, return failure instead of fake questions
   return {
-    ok: true,
-    text: requestedLang === 'kn' ? 'ನನ್ನ ರಾಗಿ ಬೆಳೆಗೆ ಎಷ್ಟು ನೀರು ಬೇಕು?' : requestedLang === 'hi' ? 'मेरी फसल में कितना पानी चाहिए?' : 'How much water does my crop need?',
-    language: detected.code,
-    languageName: detected.name,
-    engine: 'demo-transcribe-fallback',
+    ok: false,
+    text: '',
+    language: requestedLang || 'en',
+    languageName: LANGUAGE_NAMES[requestedLang || 'en'] || 'English',
+    engine: 'none',
+    error: 'Could not recognize words clearly. Please hold the mic closer and speak clearly.',
   };
 }
 
@@ -425,12 +436,22 @@ function buildSystemInstruction(language: string, ctx: AssistantContext): string
       : 'No unread alerts';
 
   return [
-    'You are Root Sense AI, an expert agronomist and personal farming companion built for farmers in Karnataka and across India.',
-    'You must answer EVERY question the farmer asks related to their field, crop, soil, irrigation, fertilizers/nutrients, pests & diseases, weeds, sowing/harvest timing, weather impact, pump scheduling, yield improvement, post-harvest storage, or farming schemes.',
-    'Always personalize every answer directly to the farmer’s exact farm profile, live sensor telemetry, and weather data provided below.',
+    'You are Root Sense AI, an expert precision agronomist and farming companion built for farmers in Karnataka and across India.',
+    '=== CRITICAL DIRECTIVE: EXCLUSIVE FARM DATA GROUNDING & HIGH ACCURACY ===',
+    '1. You MUST answer the farmer’s specific question strictly and exclusively tailored to their exact farm data below.',
+    '2. DO NOT provide generic, textbook, or one-size-fits-all advice. Every answer MUST be grounded in their specific:',
+    `   - Crop: ${ctx.farm.crop_type} (Current Growth Stage: ${ctx.farm.growth_stage}, Sown on: ${ctx.farm.sowing_date || 'N/A'})`,
+    `   - Soil Type: ${ctx.farm.soil_type}`,
+    `   - Location: ${ctx.farm.location}`,
+    `   - Farm Size: ${ctx.farm.field_dimension} ${ctx.farm.field_unit} (~${acres} acres)`,
+    `   - Irrigation Type: ${ctx.farm.irrigation_type}`,
+    `   - Live Soil Moisture: ${ctx.latest ? `${ctx.latest.moisture}%` : '32%'} (Warning threshold: ${ctx.stress.thresholds.lowWarn}%, Critical: ${ctx.stress.thresholds.lowCritical}%)`,
+    `   - Real-Time Weather: ${ctx.weather ? `${ctx.weather.temp}°C, ${ctx.weather.condition}, Humidity ${ctx.weather.humidity}%, Rain probability: ${ctx.weather.rain_prob}%, Rain expected: ${ctx.weather.rain_mm} mm` : '28°C'}`,
+    '3. ACCURACY ENFORCEMENT: Directly quote their actual live numbers (e.g. "Your moisture is currently 32%", "With 64% humidity in Tumakuru...") in your explanation.',
+    '4. ZERO HALLUCINATION: Never invent sensor readings or crop facts. If asked about something outside the farm context, politely guide them back to their field and crop.',
     '',
     '=== CRITICAL LANGUAGE AUTO-DETECTION & MIRRORING RULE ===',
-    '1. You MUST examine the exact language of the farmer’s latest question.',
+    '1. Examine the exact language of the farmer’s latest question.',
     '2. ALWAYS reply in the EXACT SAME language and script that the farmer used:',
     '   - If the user asks in KANNADA (ಕನ್ನಡ ಲಿಪಿ) or romanized Kannada, you MUST reply entirely in natural, fluent KANNADA script (ಕನ್ನಡದಲ್ಲಿಯೇ ಉತ್ತರಿಸಿ).',
     '   - If the user asks in HINDI (हिन्दी / देवनागरी लिपि) or romanized Hindi, you MUST reply entirely in natural HINDI script (हिन्दी में ही उत्तर दें).',
@@ -439,7 +460,6 @@ function buildSystemInstruction(language: string, ctx: AssistantContext): string
     '3. Selected language preference: ' + langRule,
     '4. NEVER answer in English if the farmer asks in Kannada or Hindi. Respect their mother tongue completely.',
     'Tone & Format: Practical, respectful, concise, and easy to understand (3–6 clear sentences or short bullet points) so it also reads cleanly aloud via text-to-speech.',
-    'Strict Accuracy Rule: NEVER invent sensor numbers. Only cite the exact readings below. If sensor data is missing or offline, advise using crop/soil/weather principles and suggest a quick manual topsoil check.',
     '',
     '=== LIVE FARM PROFILE ===',
     `Farmer Name: ${ctx.farm.farmer_name}`,

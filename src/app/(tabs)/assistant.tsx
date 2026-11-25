@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { File } from 'expo-file-system';
 import {
   useAudioRecorder,
   RecordingPresets,
@@ -224,52 +225,69 @@ export default function AssistantScreen() {
         return;
       }
 
-      // Convert audio file to base64
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // Convert audio file to base64 using File (with fallback)
+      let base64Data = '';
+      try {
+        const file = new File(uri);
+        base64Data = await file.base64();
+      } catch (fsErr) {
+        console.warn('[Voice] File.base64() error, falling back to fetch blob:', fsErr);
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const rawResult = reader.result as string;
+            resolve(rawResult.includes(',') ? rawResult.split(',')[1] : rawResult);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
 
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onloadend = async () => {
-        try {
-          const rawResult = reader.result as string;
-          const base64Data = rawResult.includes(',') ? rawResult.split(',')[1] : rawResult;
-          const mimeType = blob.type || (Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4');
+      if (!base64Data || !base64Data.trim()) {
+        setIsTranscribing(false);
+        setDetectedToast({
+          text: 'No audio captured. Please hold the mic and speak clearly.',
+          language: 'en',
+          name: 'Try Again',
+        });
+        setTimeout(() => setDetectedToast(null), 4000);
+        return;
+      }
 
-          const stt = await transcribeVoice(base64Data, mimeType, assistantLanguage);
-          setIsTranscribing(false);
+      const mimeType = uri.endsWith('.3gp') ? 'audio/3gpp' : uri.endsWith('.wav') ? 'audio/wav' : 'audio/m4a';
+      const stt = await transcribeVoice(base64Data, mimeType, assistantLanguage);
+      setIsTranscribing(false);
 
-          if (stt && stt.text && stt.text.trim()) {
-            const detected = detectClientLanguage(stt.text);
-            const langCode = stt.language && stt.language !== 'en' ? stt.language : detected.code;
+      if (stt && stt.ok && stt.text && stt.text.trim()) {
+        const detected = detectClientLanguage(stt.text);
+        const langCode = stt.language && stt.language !== 'en' ? stt.language : detected.code;
 
-            setDetectedToast({
-              text: stt.text,
-              language: langCode,
-              name: stt.languageName || detected.label,
-            });
+        setDetectedToast({
+          text: `"${stt.text}"`,
+          language: langCode,
+          name: stt.languageName || detected.label,
+        });
+        setTimeout(() => setDetectedToast(null), 5000);
 
-            // Update UI language so user sees the detected language
-            setAssistantLanguage(langCode);
+        // Update UI language so user sees the detected language
+        setAssistantLanguage(langCode);
 
-            // Automatically send query to assistant in the detected language
-            await sendChatMessage(stt.text, langCode);
-            setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 140);
-          } else {
-            setDetectedToast({
-              text: 'Voice captured, but words could not be recognized. Please try speaking closer to the microphone.',
-              language: 'en',
-              name: 'Try Again',
-            });
-            setTimeout(() => setDetectedToast(null), 4000);
-          }
-        } catch (err) {
-          console.warn('[Voice] Error parsing transcription:', err);
-          setIsTranscribing(false);
-        }
-      };
+        // Automatically send query to assistant in the detected language
+        await sendChatMessage(stt.text, langCode);
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 140);
+      } else {
+        setDetectedToast({
+          text: stt?.error || 'Voice captured, but words could not be recognized. Please speak closer to the mic.',
+          language: 'en',
+          name: 'Try Again',
+        });
+        setTimeout(() => setDetectedToast(null), 4000);
+      }
     } catch (err) {
       console.warn('[Voice] Failed to stop recording:', err);
+      setIsRecording(false);
       setIsTranscribing(false);
     }
   };

@@ -63,7 +63,7 @@ interface FarmContextType {
     audioBase64: string,
     mimeType?: string,
     language?: string
-  ) => Promise<{ ok: boolean; text: string; language: string; languageName: string; engine: string }>;
+  ) => Promise<{ ok: boolean; text: string; language: string; languageName: string; engine: string; error?: string }>;
   getFirstName: () => string;
 }
 
@@ -601,7 +601,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     audioBase64: string,
     mimeType = 'audio/m4a',
     language?: string
-  ): Promise<{ ok: boolean; text: string; language: string; languageName: string; engine: string }> => {
+  ): Promise<{ ok: boolean; text: string; language: string; languageName: string; engine: string; error?: string }> => {
     try {
       const res = await RootSenseApi.transcribeAudio(audioBase64, mimeType, language);
       if (res.ok && res.language) {
