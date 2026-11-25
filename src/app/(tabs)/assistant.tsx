@@ -14,7 +14,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import {
+  useAudioRecorder,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from 'expo-audio';
 import * as Speech from 'expo-speech';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { AudioWaveform } from '../../components/AudioWaveform';
@@ -97,7 +102,7 @@ export default function AssistantScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Real Audio Recording & STT state
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -177,29 +182,27 @@ export default function AssistantScreen() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Start voice recording with expo-av
+  // Start voice recording with expo-audio
   const startVoiceRecording = async () => {
     try {
-      const perm = await Audio.requestPermissionsAsync();
+      const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) {
         alert('Microphone permission is required to capture your voice query.');
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
 
       Speech.stop();
       setSpeakingId(null);
       setDetectedToast(null);
 
-      const newRec = new Audio.Recording();
-      await newRec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await newRec.startAsync();
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
 
-      setRecording(newRec);
       setIsRecording(true);
     } catch (err) {
       console.warn('[Voice] Failed to start recording:', err);
@@ -209,18 +212,12 @@ export default function AssistantScreen() {
 
   // Stop voice recording, transcribe with auto language detection, and send
   const stopVoiceRecording = async () => {
-    if (!recording) {
-      setIsRecording(false);
-      return;
-    }
-
     setIsRecording(false);
     setIsTranscribing(true);
 
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
 
       if (!uri) {
         setIsTranscribing(false);
