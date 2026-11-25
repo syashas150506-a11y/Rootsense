@@ -481,4 +481,21 @@ export const RootSenseApi = {
       },
       45000
     ),
+
+  transcribeAudio: (audioBase64: string, mimeType = 'audio/m4a', language?: string) =>
+    requestJson<{
+      ok: boolean;
+      text: string;
+      language: string;
+      languageName: string;
+      engine: string;
+      error?: string;
+    }>(
+      '/api/assistant/transcribe',
+      {
+        method: 'POST',
+        body: JSON.stringify({ audioBase64, mimeType, language }),
+      },
+      30000
+    ),
 };

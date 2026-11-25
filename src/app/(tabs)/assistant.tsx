@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,23 +10,73 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { AudioWaveform } from '../../components/AudioWaveform';
 import { useFarm } from '../../context/FarmContext';
 
 const LANGUAGES = [
+  { code: 'auto', label: 'Auto Detect 🌐', bcp47: 'kn-IN' },
+  { code: 'kn', label: 'ಕನ್ನಡ (Kannada)', bcp47: 'kn-IN' },
+  { code: 'hi', label: 'हिन्दी (Hindi)', bcp47: 'hi-IN' },
   { code: 'en', label: 'English', bcp47: 'en-IN' },
-  { code: 'kn', label: 'ಕನ್ನಡ', bcp47: 'kn-IN' },
-  { code: 'hi', label: 'हिन्दी', bcp47: 'hi-IN' },
-  { code: 'te', label: 'తెలుగు', bcp47: 'te-IN' },
-  { code: 'ta', label: 'தமிழ்', bcp47: 'ta-IN' },
-  { code: 'ml', label: 'മലയാളം', bcp47: 'ml-IN' },
-  { code: 'mr', label: 'मराठी', bcp47: 'mr-IN' },
+  { code: 'te', label: 'తెలుగు (Telugu)', bcp47: 'te-IN' },
+  { code: 'ta', label: 'தமிழ் (Tamil)', bcp47: 'ta-IN' },
+  { code: 'ml', label: 'മലയാളം (Malayalam)', bcp47: 'ml-IN' },
+  { code: 'mr', label: 'मराठी (Marathi)', bcp47: 'mr-IN' },
 ];
+
+/** Fast Client-side language detector by unicode script and agronomic keywords */
+function detectClientLanguage(text: string): { code: string; label: string; bcp47: string } {
+  if (!text) return { code: 'en', label: 'English', bcp47: 'en-IN' };
+
+  // Kannada Unicode block
+  if (/[\u0C80-\u0CFF]/.test(text)) {
+    return { code: 'kn', label: 'ಕನ್ನಡ', bcp47: 'kn-IN' };
+  }
+  // Devanagari Unicode block (Hindi / Marathi)
+  if (/[\u0900-\u097F]/.test(text)) {
+    return { code: 'hi', label: 'हिन्दी', bcp47: 'hi-IN' };
+  }
+  // Telugu Unicode block
+  if (/[\u0C00-\u0C7F]/.test(text)) {
+    return { code: 'te', label: 'తెలుగు', bcp47: 'te-IN' };
+  }
+  // Tamil Unicode block
+  if (/[\u0B80-\u0BFF]/.test(text)) {
+    return { code: 'ta', label: 'தமிழ்', bcp47: 'ta-IN' };
+  }
+  // Malayalam Unicode block
+  if (/[\u0D00-\u0D7F]/.test(text)) {
+    return { code: 'ml', label: 'മലയാളം', bcp47: 'ml-IN' };
+  }
+
+  // Romanized Kannada check
+  const lower = text.toLowerCase();
+  const knWords = [
+    'ragi', 'bele', 'neeru', 'mannu', 'beku', 'enu', 'estu', 'yavaga',
+    'madabeku', 'tumba', 'nanna', 'hola', 'krishi', 'hasu', 'kodu',
+  ];
+  if (knWords.some((w) => new RegExp(`\\b${w}\\b`).test(lower))) {
+    return { code: 'kn', label: 'ಕನ್ನಡ', bcp47: 'kn-IN' };
+  }
+
+  // Romanized Hindi check
+  const hiWords = [
+    'paani', 'fasal', 'khet', 'kitna', 'khad', 'kab', 'kya', 'kaise',
+    'kisan', 'mitti', 'dawa', 'chhidkaw', 'meri', 'mera',
+  ];
+  if (hiWords.some((w) => new RegExp(`\\b${w}\\b`).test(lower))) {
+    return { code: 'hi', label: 'हिन्दी', bcp47: 'hi-IN' };
+  }
+
+  return { code: 'en', label: 'English', bcp47: 'en-IN' };
+}
 
 export default function AssistantScreen() {
   const {
@@ -37,45 +87,231 @@ export default function AssistantScreen() {
     setAssistantLanguage,
     clearChatHistory,
     sendChatMessage,
+    transcribeVoice,
   } = useFarm();
 
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
   const [inputText, setInputText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Real Audio Recording & STT state
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [detectedToast, setDetectedToast] = useState<{
+    text: string;
+    language: string;
+    name: string;
+  } | null>(null);
+
+  // Pulse animation for recording ring
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const cropName = farmDetails?.cropGrown || 'Ragi';
   const soilName = farmDetails?.soilType || 'Red Loam';
 
-  const suggestedQuestions = [
-    'Why is my soil moisture decreasing?',
-    `What fertilizer schedule is best for my ${cropName} in ${soilName}?`,
-    `How do I protect my ${cropName} from pests and leaf diseases?`,
-    "Will tomorrow's rainfall affect irrigation?",
-  ];
+  // Live timer while recording
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (isRecording) {
+      interval = setInterval(() => {
+        setRecordSeconds((sec) => sec + 1);
+      }, 1000);
+
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.25,
+            duration: 650,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 650,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      setRecordSeconds(0);
+      pulseAnim.setValue(1);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRecording, pulseAnim]);
+
+  // Multilingual dynamic suggestions tailored to the active language
+  const getSuggestions = () => {
+    if (assistantLanguage === 'kn') {
+      return [
+        'ನನ್ನ ಜಮೀನಿನಲ್ಲಿ ತೇವಾಂಶ ಏಕೆ ಕಡಿಮೆಯಾಗುತ್ತಿದೆ?',
+        `ನನ್ನ ${cropName} ಬೆಳೆಗೆ ಯಾವ ಗೊಬ್ಬರ ಮತ್ತು ನೀರು ಉತ್ತಮ?`,
+        `ಕೀಟ ಮತ್ತು ರೋಗಗಳಿಂದ ${cropName} ರಕ್ಷಿಸುವುದು ಹೇಗೆ?`,
+        'ನಾಳೆಯ ಹವಾಮಾನದಲ್ಲಿ ಮಳೆಯ ಸಾಧ್ಯತೆ ಎಷ್ಟಿದೆ?',
+      ];
+    }
+    if (assistantLanguage === 'hi') {
+      return [
+        'मेरे खेत की नमी क्यों कम हो रही है?',
+        `मेरी ${cropName} फसल के लिए कौन सी खाद सबसे अच्छी है?`,
+        `कीटों और रोगों से ${cropName} फसल को कैसे बचाएं?`,
+        'कल के मौसम में बारिश का क्या अनुमान है?',
+      ];
+    }
+    return [
+      'Why is my soil moisture decreasing?',
+      `What fertilizer schedule is best for my ${cropName} in ${soilName}?`,
+      `How do I protect my ${cropName} from pests and leaf diseases?`,
+      "Will tomorrow's rainfall affect irrigation?",
+    ];
+  };
+
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  // Start voice recording with expo-av
+  const startVoiceRecording = async () => {
+    try {
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) {
+        alert('Microphone permission is required to capture your voice query.');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      Speech.stop();
+      setSpeakingId(null);
+      setDetectedToast(null);
+
+      const newRec = new Audio.Recording();
+      await newRec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await newRec.startAsync();
+
+      setRecording(newRec);
+      setIsRecording(true);
+    } catch (err) {
+      console.warn('[Voice] Failed to start recording:', err);
+      setIsRecording(false);
+    }
+  };
+
+  // Stop voice recording, transcribe with auto language detection, and send
+  const stopVoiceRecording = async () => {
+    if (!recording) {
+      setIsRecording(false);
+      return;
+    }
+
+    setIsRecording(false);
+    setIsTranscribing(true);
+
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+
+      if (!uri) {
+        setIsTranscribing(false);
+        return;
+      }
+
+      // Convert audio file to base64
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        try {
+          const rawResult = reader.result as string;
+          const base64Data = rawResult.includes(',') ? rawResult.split(',')[1] : rawResult;
+          const mimeType = blob.type || (Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4');
+
+          const stt = await transcribeVoice(base64Data, mimeType, assistantLanguage);
+          setIsTranscribing(false);
+
+          if (stt && stt.text && stt.text.trim()) {
+            const detected = detectClientLanguage(stt.text);
+            const langCode = stt.language && stt.language !== 'en' ? stt.language : detected.code;
+
+            setDetectedToast({
+              text: stt.text,
+              language: langCode,
+              name: stt.languageName || detected.label,
+            });
+
+            // Update UI language so user sees the detected language
+            setAssistantLanguage(langCode);
+
+            // Automatically send query to assistant in the detected language
+            await sendChatMessage(stt.text, langCode);
+            setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 140);
+          } else {
+            setDetectedToast({
+              text: 'Voice captured, but words could not be recognized. Please try speaking closer to the microphone.',
+              language: 'en',
+              name: 'Try Again',
+            });
+            setTimeout(() => setDetectedToast(null), 4000);
+          }
+        } catch (err) {
+          console.warn('[Voice] Error parsing transcription:', err);
+          setIsTranscribing(false);
+        }
+      };
+    } catch (err) {
+      console.warn('[Voice] Failed to stop recording:', err);
+      setIsTranscribing(false);
+    }
+  };
 
   const handleSend = async (textToSend?: string) => {
     const query = (textToSend ?? inputText).trim();
     if (!query || chatSending) return;
     setInputText('');
-    await sendChatMessage(query, assistantLanguage);
+
+    // Auto-detect language from query text
+    const detected = detectClientLanguage(query);
+    const targetLang = assistantLanguage === 'auto' ? detected.code : assistantLanguage;
+
+    if (assistantLanguage === 'auto' && detected.code !== 'en') {
+      setAssistantLanguage(detected.code);
+    }
+
+    await sendChatMessage(query, targetLang);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 140);
   };
 
-  const handleSpeak = (id: string, text: string) => {
+  const handleSpeak = (id: string, text: string, msgLang?: string) => {
     if (speakingId === id) {
       Speech.stop();
       setSpeakingId(null);
       return;
     }
     Speech.stop();
-    const langObj = LANGUAGES.find((l) => l.code === assistantLanguage) || LANGUAGES[0];
+
+    // Auto-detect speech language from message text or msgLang
+    const detected = detectClientLanguage(text);
+    const langCode = msgLang && msgLang !== 'auto' ? msgLang : detected.code;
+    const langObj = LANGUAGES.find((l) => l.code === langCode) || LANGUAGES.find((l) => l.code === 'en')!;
+
     setSpeakingId(id);
     Speech.speak(text, {
       language: langObj.bcp47,
       rate: 0.95,
+      pitch: 1.0,
       onDone: () => setSpeakingId(null),
       onStopped: () => setSpeakingId(null),
       onError: () => setSpeakingId(null),
@@ -88,7 +324,7 @@ export default function AssistantScreen() {
         style={styles.flexOne}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Clean Header (matching design without status badge pill) */}
+        {/* Header */}
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
             <View style={styles.botIconWrapper}>
@@ -96,7 +332,7 @@ export default function AssistantScreen() {
             </View>
             <View>
               <Text style={styles.headerTitle}>Root Sense AI</Text>
-              <Text style={styles.headerSub}>Your personal farming companion.</Text>
+              <Text style={styles.headerSub}>Multilingual Voice Farming Assistant</Text>
             </View>
           </View>
 
@@ -109,7 +345,7 @@ export default function AssistantScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Language Quick Strip */}
+        {/* Language Strip with Auto-Detect */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -142,6 +378,8 @@ export default function AssistantScreen() {
         >
           {chatMessages.map((m, idx) => {
             const isUser = m.sender === 'user';
+            const detected = detectClientLanguage(m.text);
+
             return (
               <View
                 key={`${m.id}-${idx}`}
@@ -162,6 +400,13 @@ export default function AssistantScreen() {
                     isUser ? styles.userBubble : styles.assistantBubble,
                   ]}
                 >
+                  {/* Language pill indicator */}
+                  <View style={styles.langTagRow}>
+                    <Text style={[styles.langTagText, isUser && styles.langTagTextUser]}>
+                      {detected.label}
+                    </Text>
+                  </View>
+
                   <Text
                     style={[
                       styles.messageText,
@@ -174,8 +419,9 @@ export default function AssistantScreen() {
                   {!isUser && (
                     <View style={styles.assistantActionsRow}>
                       <TouchableOpacity
-                        onPress={() => handleSpeak(m.id, m.text)}
+                        onPress={() => handleSpeak(m.id, m.text, m.language)}
                         style={styles.iconAction}
+                        activeOpacity={0.7}
                       >
                         <Ionicons
                           name={
@@ -183,7 +429,7 @@ export default function AssistantScreen() {
                               ? 'stop-circle'
                               : 'volume-medium-outline'
                           }
-                          size={17}
+                          size={18}
                           color={
                             speakingId === m.id
                               ? Colors.oliveGreen
@@ -221,15 +467,27 @@ export default function AssistantScreen() {
               </View>
               <View style={[styles.messageBubble, styles.assistantBubble, styles.typingBubble]}>
                 <ActivityIndicator size="small" color={Colors.oliveGreen} />
-                <Text style={styles.typingText}>Analyzing your field data...</Text>
+                <Text style={styles.typingText}>
+                  {assistantLanguage === 'kn'
+                    ? 'ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ವಿಶ್ಲೇಷಿಸಲಾಗುತ್ತಿದೆ...'
+                    : assistantLanguage === 'hi'
+                    ? 'आपके प्रश्न का विश्लेषण किया जा रहा है...'
+                    : 'Analyzing your field data...'}
+                </Text>
               </View>
             </View>
           )}
 
-          {/* Suggested Questions tailored to the Farmer's Field */}
+          {/* Suggested Questions in user's active language */}
           <View style={styles.suggestedContainer}>
-            <Text style={styles.suggestedHeader}>Suggested questions for your field</Text>
-            {suggestedQuestions.map((q, idx) => (
+            <Text style={styles.suggestedHeader}>
+              {assistantLanguage === 'kn'
+                ? 'ನಿಮ್ಮ ಜಮೀನಿಗಾಗಿ ಸಲಹಾ ಪ್ರಶ್ನೆಗಳು'
+                : assistantLanguage === 'hi'
+                ? 'आपके खेत के लिए सुझाव प्रश्न'
+                : 'Suggested questions for your field'}
+            </Text>
+            {getSuggestions().map((q, idx) => (
               <TouchableOpacity
                 key={idx}
                 style={styles.suggestionPill}
@@ -243,27 +501,72 @@ export default function AssistantScreen() {
           </View>
         </ScrollView>
 
+        {/* Auto-detected language notification toast */}
+        {detectedToast && (
+          <View style={styles.toastCard}>
+            <Ionicons name="globe-outline" size={18} color="#27AE60" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toastTitle}>Auto-detected: {detectedToast.name}</Text>
+              <Text style={styles.toastSub} numberOfLines={1}>"{detectedToast.text}"</Text>
+            </View>
+            <TouchableOpacity onPress={() => setDetectedToast(null)}>
+              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Transcribing loader banner */}
+        {isTranscribing && (
+          <View style={styles.transcribingBanner}>
+            <ActivityIndicator size="small" color={Colors.oliveGreen} />
+            <Text style={styles.transcribingText}>
+              Auto-detecting language &amp; converting speech to text...
+            </Text>
+          </View>
+        )}
+
         {/* Bottom Voice / Text Input Bar */}
         <View style={styles.bottomBar}>
+          {/* Animated Mic Button */}
           <TouchableOpacity
-            style={[styles.micButton, isRecording && styles.micButtonActive]}
-            onPress={() => setIsRecording(!isRecording)}
+            style={[
+              styles.micButton,
+              isRecording && styles.micButtonActive,
+            ]}
+            onPress={isRecording ? stopVoiceRecording : startVoiceRecording}
             activeOpacity={0.8}
           >
-            <Ionicons
-              name={isRecording ? 'mic' : 'mic-outline'}
-              size={22}
-              color={isRecording ? Colors.pureWhite : Colors.charcoal}
-            />
+            {isRecording ? (
+              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                <Ionicons name="stop" size={20} color={Colors.pureWhite} />
+              </Animated.View>
+            ) : (
+              <Ionicons name="mic" size={22} color={Colors.charcoal} />
+            )}
           </TouchableOpacity>
 
           <View style={styles.centerInputArea}>
             {isRecording ? (
-              <AudioWaveform isActive={true} />
+              <View style={styles.recordingLiveBox}>
+                <View style={styles.recordingTimerRow}>
+                  <View style={styles.recordingRedDot} />
+                  <Text style={styles.recordingTimerText}>REC {formatTimer(recordSeconds)}</Text>
+                </View>
+                <Text style={styles.recordingHintText}>
+                  Listening in any language (ಕನ್ನಡ, हिन्दी, English...)
+                </Text>
+                <AudioWaveform isActive={true} />
+              </View>
             ) : (
               <TextInput
                 style={styles.chatTextInput}
-                placeholder={`Ask anything about your ${cropName} field...`}
+                placeholder={
+                  assistantLanguage === 'kn'
+                    ? 'ಕನ್ನಡದಲ್ಲಿ ಅಥವಾ ಇಂಗ್ಲಿಷ್‌ನಲ್ಲಿ ಕೇಳಿ...'
+                    : assistantLanguage === 'hi'
+                    ? 'हिन्दी या अंग्रेज़ी में पूछें...'
+                    : `Ask anything about your ${cropName} field...`
+                }
                 placeholderTextColor={Colors.textMuted}
                 value={inputText}
                 onChangeText={setInputText}
@@ -274,16 +577,23 @@ export default function AssistantScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.sendButton, chatSending && { opacity: 0.6 }]}
-            onPress={() => handleSend()}
-            disabled={chatSending}
+            style={[
+              styles.sendButton,
+              (chatSending || isTranscribing) && { opacity: 0.6 },
+            ]}
+            onPress={isRecording ? stopVoiceRecording : () => handleSend()}
+            disabled={chatSending || isTranscribing}
             activeOpacity={0.8}
           >
-            <Ionicons name="arrow-up" size={20} color={Colors.pureWhite} />
+            <Ionicons
+              name={isRecording ? 'checkmark' : 'arrow-up'}
+              size={20}
+              color={Colors.pureWhite}
+            />
           </TouchableOpacity>
         </View>
 
-        {/* Simple Chat Options Menu */}
+        {/* Chat Options Menu */}
         <Modal visible={menuOpen} transparent animationType="fade">
           <TouchableOpacity
             style={styles.modalBackdrop}
@@ -291,7 +601,15 @@ export default function AssistantScreen() {
             onPress={() => setMenuOpen(false)}
           >
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Chat Options</Text>
+              <Text style={styles.modalTitle}>Voice &amp; AI Settings</Text>
+
+              <View style={styles.menuInfoBox}>
+                <Ionicons name="mic-outline" size={18} color={Colors.oliveGreen} />
+                <Text style={styles.menuInfoText}>
+                  Speech-to-Text: Auto language detection enabled for Kannada, Hindi &amp; Indian languages.
+                </Text>
+              </View>
+
               <TouchableOpacity
                 style={styles.clearChatButton}
                 onPress={async () => {
@@ -328,21 +646,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.sandBeige,
+    borderBottomColor: Colors.border,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    flex: 1,
   },
   botIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#EBF2DB',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.softCream,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   headerTitle: {
     fontSize: Typography.fontSizes.md,
@@ -351,23 +670,25 @@ const styles = StyleSheet.create({
   },
   headerSub: {
     fontSize: Typography.fontSizes.xs,
-    color: Colors.mutedGrey,
+    color: Colors.textSecondary,
   },
   dotsButton: {
     width: 36,
     height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   langBar: {
-    maxHeight: 44,
+    maxHeight: 46,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.sandBeige,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.warmIvory,
   },
   langBarContent: {
     paddingHorizontal: Spacing.xl,
-    alignItems: 'center',
-    gap: 8,
+    paddingVertical: 7,
+    gap: Spacing.xs,
   },
   langChip: {
     paddingHorizontal: 12,
@@ -378,13 +699,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   langChipActive: {
-    backgroundColor: Colors.oliveGreen,
-    borderColor: Colors.oliveGreen,
+    backgroundColor: Colors.deepOlive,
+    borderColor: Colors.deepOlive,
   },
   langChipText: {
-    fontSize: 11.5,
+    fontSize: 12,
+    color: Colors.textSecondary,
     fontWeight: '600',
-    color: Colors.charcoal,
   },
   langChipTextActive: {
     color: Colors.pureWhite,
@@ -395,13 +716,12 @@ const styles = StyleSheet.create({
   chatContent: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.md,
-    paddingBottom: Spacing.xl,
+    paddingBottom: Spacing.xxl,
     gap: Spacing.md,
   },
   messageRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
+    gap: Spacing.sm,
   },
   userRow: {
     justifyContent: 'flex-end',
@@ -413,34 +733,40 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#EBF2DB',
+    backgroundColor: Colors.softCream,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   messageBubble: {
     maxWidth: '82%',
     padding: Spacing.md,
     borderRadius: BorderRadius.lg,
+    ...Shadows.soft,
   },
   userBubble: {
     backgroundColor: Colors.deepOlive,
     borderBottomRightRadius: 4,
   },
   assistantBubble: {
-    backgroundColor: Colors.softCream,
+    backgroundColor: Colors.pureWhite,
+    borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderBottomLeftRadius: 4,
   },
-  typingBubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  langTagRow: {
+    marginBottom: 4,
   },
-  typingText: {
-    fontSize: Typography.fontSizes.xs + 1,
-    color: Colors.mutedGrey,
+  langTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.oliveGreen,
+    textTransform: 'uppercase',
+  },
+  langTagTextUser: {
+    color: 'rgba(255, 255, 255, 0.75)',
   },
   messageText: {
     fontSize: Typography.fontSizes.sm,
@@ -448,7 +774,6 @@ const styles = StyleSheet.create({
   },
   userText: {
     color: Colors.pureWhite,
-    fontWeight: '500',
   },
   assistantText: {
     color: Colors.charcoal,
@@ -457,83 +782,163 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
     paddingTop: 6,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(236, 224, 194, 0.6)',
-  },
-  thumbRow: {
-    flexDirection: 'row',
-    gap: 8,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
   iconAction: {
     padding: 4,
   },
+  thumbRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  typingBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+  },
+  typingText: {
+    fontSize: Typography.fontSizes.xs,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+  },
   suggestedContainer: {
-    marginTop: Spacing.md,
-    gap: Spacing.xs + 2,
+    marginTop: Spacing.lg,
+    gap: Spacing.sm,
   },
   suggestedHeader: {
     fontSize: Typography.fontSizes.xs,
     fontWeight: '700',
-    color: Colors.charcoal,
-    marginBottom: 4,
+    color: Colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
   suggestionPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.sm,
     backgroundColor: Colors.pureWhite,
     paddingVertical: 10,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 8,
   },
   suggestionText: {
-    flex: 1,
-    fontSize: Typography.fontSizes.xs + 1,
+    fontSize: Typography.fontSizes.xs,
     color: Colors.charcoal,
-    fontWeight: '500',
+    flex: 1,
+  },
+  toastCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: Spacing.xl,
+    marginBottom: 6,
+    backgroundColor: '#EAF7EE',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#BBE6C7',
+    ...Shadows.soft,
+  },
+  toastTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E7E43',
+  },
+  toastSub: {
+    fontSize: 11,
+    color: '#2A5A35',
+  },
+  transcribingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginHorizontal: Spacing.xl,
+    marginBottom: 6,
+    backgroundColor: Colors.softCream,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  transcribingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.deepOlive,
   },
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    backgroundColor: Colors.warmIvory,
+    backgroundColor: Colors.pureWhite,
     borderTopWidth: 1,
-    borderTopColor: Colors.sandBeige,
-    gap: Spacing.sm,
+    borderTopColor: Colors.border,
+    gap: Spacing.xs,
   },
   micButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: Colors.softCream,
-    borderWidth: 1,
-    borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   micButtonActive: {
-    backgroundColor: Colors.error,
-    borderColor: Colors.error,
+    backgroundColor: '#E53935',
+    borderColor: '#C62828',
   },
   centerInputArea: {
     flex: 1,
-    minHeight: 44,
-    backgroundColor: Colors.pureWhite,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.md,
-    justifyContent: 'center',
   },
   chatTextInput: {
+    minHeight: 42,
+    maxHeight: 90,
+    backgroundColor: Colors.softCream,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
     fontSize: Typography.fontSizes.sm,
     color: Colors.charcoal,
-    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  recordingLiveBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
+    gap: 2,
+  },
+  recordingTimerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recordingRedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E53935',
+  },
+  recordingTimerText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#E53935',
+  },
+  recordingHintText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: Colors.textSecondary,
   },
   sendButton: {
     width: 44,
@@ -546,38 +951,49 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(37, 37, 31, 0.45)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.xl,
   },
   modalCard: {
-    backgroundColor: Colors.warmIvory,
+    width: '100%',
+    backgroundColor: Colors.pureWhite,
     borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.sandBeige,
-    ...Shadows.elevated,
+    padding: Spacing.xl,
+    gap: Spacing.md,
+    ...Shadows.card,
   },
   modalTitle: {
     fontSize: Typography.fontSizes.md,
     fontWeight: '700',
     color: Colors.charcoal,
-    marginBottom: Spacing.sm,
+  },
+  menuInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.softCream,
+    padding: 10,
+    borderRadius: BorderRadius.md,
+  },
+  menuInfoText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    flex: 1,
+    lineHeight: 16,
   },
   clearChatButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.pureWhite,
+    gap: Spacing.sm,
     paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
   clearChatText: {
     fontSize: Typography.fontSizes.sm,
-    fontWeight: '600',
     color: Colors.error,
+    fontWeight: '600',
   },
 });

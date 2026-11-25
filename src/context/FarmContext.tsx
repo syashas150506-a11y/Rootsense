@@ -59,6 +59,11 @@ interface FarmContextType {
   markAllNotificationsRead: () => Promise<void>;
   markNotificationRead: (id: string) => Promise<void>;
   sendChatMessage: (message: string, language?: string) => Promise<void>;
+  transcribeVoice: (
+    audioBase64: string,
+    mimeType?: string,
+    language?: string
+  ) => Promise<{ ok: boolean; text: string; language: string; languageName: string; engine: string }>;
   getFirstName: () => string;
 }
 
@@ -592,6 +597,29 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const transcribeVoice = async (
+    audioBase64: string,
+    mimeType = 'audio/m4a',
+    language?: string
+  ): Promise<{ ok: boolean; text: string; language: string; languageName: string; engine: string }> => {
+    try {
+      const res = await RootSenseApi.transcribeAudio(audioBase64, mimeType, language);
+      if (res.ok && res.language) {
+        setAssistantLanguage(res.language);
+      }
+      return res;
+    } catch (err) {
+      console.warn('[FarmContext] Voice transcription error:', err);
+      return {
+        ok: false,
+        text: '',
+        language: 'en',
+        languageName: 'English',
+        engine: 'error',
+      };
+    }
+  };
+
   const getFirstName = () => {
     if (!farmDetails?.name) return 'Farmer';
     const parts = farmDetails.name.trim().split(' ');
@@ -647,6 +675,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markAllNotificationsRead,
         markNotificationRead,
         sendChatMessage,
+        transcribeVoice,
         getFirstName,
       }}
     >
